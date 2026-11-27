@@ -17,8 +17,8 @@ A lightweight, hardware-aware PowerShell utility to optimize **Windows 11 laptop
   - Records a completion marker so subsequent runs and boot tasks never trigger redundant restore points.
 - **Idempotent Backup & One-Command Rollback**: Exports original registry keys and service configurations into `backup_tweaks/` on first run only, and supports full rollback via `-Revert`.
 - **Automatic UAC Elevation**: Can be launched directly from a standard user PowerShell window — automatically prompts for Administrator privileges (UAC) when system changes are requested (`-DryRun` runs without elevation).
-- **Persistent User-Profile Installation**: On first install, copies `LaptopOptimizer.ps1` into `%USERPROFILE%\Opydigital\LaptopOptimizer\` along with backups, logs, and exclusions, so the script and scheduled task keep working even if the original download is deleted.
-- **Headless Logon Foreground Priority Booster**: Automatically registered on first install as a Windows Scheduled Task pointing to `%USERPROFILE%\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1`, running via `conhost.exe --headless` (zero taskbar window or console flash) to dynamically boost the active foreground application to `AboveNormal` while excluding critical system and anti-cheat processes.
+- **Persistent Program Files Installation**: On first install, copies `LaptopOptimizer.ps1` into `%ProgramFiles%\Opydigital\LaptopOptimizer\` along with backups, logs, and exclusions, so the script and scheduled task keep working even if the original download is deleted.
+- **Headless Logon Foreground Priority Booster**: Automatically registered on first install as a Windows Scheduled Task pointing to `%ProgramFiles%\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1`, running via `conhost.exe --headless` (zero taskbar window or console flash) to dynamically boost the active foreground application to `AboveNormal` while excluding critical system and anti-cheat processes.
 - **Dry-Run Mode**: Inspect detected hardware and preview the exact optimization plan without Administrator privileges (`-DryRun`).
 
 ---
@@ -58,14 +58,14 @@ For a complete technical breakdown of every registry key, service, and command, 
    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\LaptopOptimizer.ps1 -DryRun
    ```
 
-3. Apply optimizations, install to `%USERPROFILE%\Opydigital\LaptopOptimizer\`, and register the headless logon task (can be run from a regular user PowerShell — UAC elevation is requested automatically):
+3. Apply optimizations, install to `%ProgramFiles%\Opydigital\LaptopOptimizer\`, and register the headless logon task (can be run from a regular user PowerShell — UAC elevation is requested automatically):
    ```powershell
    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\LaptopOptimizer.ps1
    ```
 
 4. *(Optional)* Re-register or remove the scheduled task later:
    ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1" -UninstallTask
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:ProgramFiles\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1" -UninstallTask
    ```
 
 ---

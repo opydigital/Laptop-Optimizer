@@ -37,7 +37,7 @@ param(
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$InstallDir      = Join-Path $env:USERPROFILE 'Opydigital\LaptopOptimizer'
+$InstallDir      = Join-Path $env:ProgramFiles 'Opydigital\LaptopOptimizer'
 $InstalledScript = Join-Path $InstallDir 'LaptopOptimizer.ps1'
 $BackupDir       = Join-Path $InstallDir 'backup_tweaks'
 $RestoreMarker   = Join-Path $BackupDir 'restore_point.ok'
@@ -73,7 +73,7 @@ function Request-Elevation {
     }
 }
 
-function Install-ToUserProfile {
+function Install-ToProgramFiles {
     if (-not (Test-Path $InstallDir)) {
         New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null
     }
@@ -291,7 +291,7 @@ function Invoke-Optimize($Hw) {
 
     Write-Host ""
     Write-Section "INSTALLING & APPLYING OPTIMIZATIONS"
-    Install-ToUserProfile
+    Install-ToProgramFiles
     Backup-OriginalState
 
     # Base optimizations
@@ -384,7 +384,7 @@ function Get-ExcludedProcesses {
 }
 
 function Install-PriorityTask {
-    Install-ToUserProfile
+    Install-ToProgramFiles
     Ensure-ExclusionsFile
 
     $action    = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -PriorityLoop"
