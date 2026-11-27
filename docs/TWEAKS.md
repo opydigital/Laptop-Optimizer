@@ -62,10 +62,12 @@ Before any tweak is applied on the first run:
 
 ---
 
-## 4. Headless Logon Priority Loop (`-InstallTask`)
+## 4. User-Profile Installation & Headless Logon Priority Loop
 
+- On first install (or when running `-InstallTask`), `LaptopOptimizer.ps1` copies itself to `%USERPROFILE%\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1`.
+- Backups (`backup_tweaks/`), logs (`tweaks_log.txt`), and exclusions (`priority_exclusions.txt`) are stored in `%USERPROFILE%\Opydigital\LaptopOptimizer\`.
 - Registers task `Opydigital_PriorityLoop` triggered `AtLogOn` for the current user (`LogonType Interactive`, `RunLevel Highest`, unlimited execution time, `MultipleInstances IgnoreNew`).
-- Launches via `conhost.exe --headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<path>" -PriorityLoop` so no console window or taskbar button appears.
+- Launches via `conhost.exe --headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1" -PriorityLoop` so no console window or taskbar button appears.
 - Polls `GetForegroundWindow()` every 2 seconds, elevates the active non-excluded process from `Normal` to `AboveNormal`, and restores the previously boosted process back to `Normal`.
 
 ---

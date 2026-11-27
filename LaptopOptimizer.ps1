@@ -30,23 +30,62 @@ param(
     [switch]$Silent,
     [switch]$InstallTask,
     [switch]$UninstallTask,
-    [switch]$PriorityLoop
+    [switch]$PriorityLoop,
+    [switch]$Elevated
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$ScriptDir      = $PSScriptRoot
-$BackupDir      = Join-Path $ScriptDir 'backup_tweaks'
-$RestoreMarker  = Join-Path $BackupDir 'restore_point.ok'
-$LogFile        = Join-Path $ScriptDir 'tweaks_log.txt'
-$ExclusionsFile = Join-Path $ScriptDir 'priority_exclusions.txt'
-$TaskName       = 'Opydigital_PriorityLoop'
+$InstallDir      = Join-Path $env:USERPROFILE 'Opydigital\LaptopOptimizer'
+$InstalledScript = Join-Path $InstallDir 'LaptopOptimizer.ps1'
+$BackupDir       = Join-Path $InstallDir 'backup_tweaks'
+$RestoreMarker   = Join-Path $BackupDir 'restore_point.ok'
+$LogFile         = Join-Path $InstallDir 'tweaks_log.txt'
+$ExclusionsFile  = Join-Path $InstallDir 'priority_exclusions.txt'
+$TaskName        = 'Opydigital_PriorityLoop'
 
 # ---------- Visual Helpers ----------
 function Test-IsAdmin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
     return ([Security.Principal.WindowsPrincipal]$id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Request-Elevation {
+    $argList = @(
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', "`"$PSCommandPath`"",
+        '-Elevated'
+    )
+    if ($Revert)        { $argList += '-Revert' }
+    if ($Silent)        { $argList += '-Silent' }
+    if ($InstallTask)   { $argList += '-InstallTask' }
+    if ($UninstallTask) { $argList += '-UninstallTask' }
+
+    try {
+        Write-Host "  [*] Requesting Administrator privileges (UAC)..." -ForegroundColor Yellow
+        Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -Verb RunAs -ErrorAction Stop
+        exit 0
+    } catch {
+        Write-Host "  [!] Administrator elevation is required and was cancelled." -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Install-ToUserProfile {
+    if (-not (Test-Path $InstallDir)) {
+        New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null
+    }
+    $sameFile = [string]::Equals(
+        [System.IO.Path]::GetFullPath($PSCommandPath),
+        [System.IO.Path]::GetFullPath($InstalledScript),
+        [StringComparison]::OrdinalIgnoreCase
+    )
+    if (-not $sameFile) {
+        Copy-Item -Path $PSCommandPath -Destination $InstalledScript -Force
+        Write-Host "  [OK] Script installed to: $InstalledScript" -ForegroundColor Green
+    }
 }
 
 function Write-Banner {
@@ -71,6 +110,7 @@ function Write-PlanRow([string]$Label, [bool]$Active, [string]$Condition) {
 }
 
 function Write-Log([string]$Msg) {
+    if (-not (Test-Path $InstallDir)) { New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null }
     $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     Add-Content -Path $LogFile -Value "[$ts] $Msg" -Encoding UTF8
 }
@@ -245,11 +285,13 @@ function Set-RegValue([string]$Path, [string]$Name, $Value, [string]$Type) {
 
 function Invoke-Optimize($Hw) {
     if (-not (Ensure-RestorePoint)) {
+        if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }
         exit 1
     }
 
     Write-Host ""
-    Write-Section "APPLYING OPTIMIZATIONS"
+    Write-Section "INSTALLING & APPLYING OPTIMIZATIONS"
+    Install-ToUserProfile
     Backup-OriginalState
 
     # Base optimizations
@@ -306,6 +348,8 @@ function Invoke-Optimize($Hw) {
         Write-Host "  [OK] CPU Turbo Boost disabled on battery (Laptop)" -ForegroundColor Green
     }
 
+    Install-PriorityTask
+
     Write-Log "APPLY | RAM=$($Hw.RAM)GB DISK=$($Hw.Disk) PORT=$($Hw.IsPortable) BUILD=$($Hw.Build) | FX=$($Hw.FX) KERN=$($Hw.KERN) SSD=$($Hw.SSDOpt) IDX=$($Hw.IDX) TURBO=$($Hw.TurboDC)"
 }
 
@@ -340,17 +384,17 @@ function Get-ExcludedProcesses {
 }
 
 function Install-PriorityTask {
+    Install-ToUserProfile
     Ensure-ExclusionsFile
-    $scriptPath = $PSCommandPath
 
-    $action    = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -PriorityLoop"
+    $action    = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -PriorityLoop"
     $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
     $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
     $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
                     -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
 
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
-    Write-Host "  [OK] Scheduled task '$TaskName' installed (headless at logon, no taskbar window)." -ForegroundColor Green
+    Write-Host "  [OK] Scheduled task '$TaskName' installed (running from $InstalledScript)." -ForegroundColor Green
     Write-Host "  [OK] Exclusions file: $ExclusionsFile" -ForegroundColor Gray
 }
 
@@ -413,14 +457,12 @@ if ($PriorityLoop) {
 Write-Banner
 
 if (-not $DryRun -and -not (Test-IsAdmin)) {
-    Write-Host "  [!] Please run PowerShell as Administrator to apply system changes." -ForegroundColor Red
-    Write-Host "  Tip: preview safely without admin privileges using: .\LaptopOptimizer.ps1 -DryRun" -ForegroundColor Gray
-    exit 1
+    Request-Elevation
 }
 
-if ($Revert)        { Invoke-Revert; exit 0 }
-if ($InstallTask)   { Install-PriorityTask; exit 0 }
-if ($UninstallTask) { Uninstall-PriorityTask; exit 0 }
+if ($Revert)        { Invoke-Revert;        if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
+if ($InstallTask)   { Install-PriorityTask; if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
+if ($UninstallTask) { Uninstall-PriorityTask; if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
 
 $hw = Get-HardwareProfile
 
@@ -452,4 +494,5 @@ if (-not $Silent) {
 
 Invoke-Optimize $hw
 Write-Host "`n  Done! Restart Windows to apply all changes." -ForegroundColor Cyan
-Write-Host "  To enable the headless logon priority loop: .\LaptopOptimizer.ps1 -InstallTask" -ForegroundColor Gray
+Write-Host "  Installed path: $InstalledScript" -ForegroundColor Gray
+if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }
