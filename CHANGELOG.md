@@ -4,6 +4,14 @@ All notable changes to **Opydigital - Laptop Optimizer** will be documented in t
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.0] - 2026-11-27
+
+### Added
+- **Gaming Laptop Optimization Suite** (`-Gaming` / Step 1 Menu `[2]`): HAGS (`HwSchMode = 2`), Game Mode, Game DVR background recording disabled, MMCSS gaming priorities & `NetworkThrottlingIndex = 0xffffffff`, and AC-only PCIe ASPM + USB Selective Suspend disabled (preserving VBS/HVCI for anti-cheats and DC battery savings).
+- **Dedicated GPU (`dGPU`) detection** via `Win32_VideoController` displayed in the hardware summary.
+- **Two-step interactive menu**: Step 1 selects **Standard Laptop**, **Gaming Laptop**, or **Uninstall & Revert**; Step 2 submenu lets both suites choose between **On-Boot Re-Apply + Background Priority Loop** or **Native On-Boot Only (Recommended for Competitive Gamers)**.
+- Full backup and rollback support for all Gaming suite registry keys and AC power settings.
+
 ## [1.0.0] - 2026-11-27
 
 ### Added

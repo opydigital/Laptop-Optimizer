@@ -17,9 +17,14 @@ A lightweight, hardware-aware PowerShell utility to optimize **Windows 11 laptop
   - Confirms that a new restore point was actually created before modifying any system setting — **aborts safely if restore point creation fails**.
   - Records a completion marker so subsequent runs and boot tasks never trigger redundant restore points.
 - **Persistent Program Files Installation**: Installs `LaptopOptimizer.ps1`, backups (`backup_tweaks/`), logs, state (`install_state.json`), and exclusions under `%ProgramFiles%\Opydigital\LaptopOptimizer\`.
-- **Two Logon Profiles (Anti-Cheat Safe)**:
-  - **Profile `[1]` — Standard + Background Priority Loop**: Re-applies native optimizations at logon via Task Scheduler (headless, no UAC), then runs a foreground priority booster (`AboveNormal`) that **automatically pauses during Direct3D fullscreen games or active anti-cheats** (`vgc`, `EasyAntiCheat`, `BEService`, `FACEIT`, `EAAntiCheat`, etc.).
-  - **Profile `[2]` — Native On-Boot Only (Recommended for Competitive Gamers)**: Re-applies native Windows optimizations **once at logon** via Task Scheduler (`conhost.exe --headless`, `RunLevel Highest`, no UAC prompt) so changes persist even if another program resets them, and **exits immediately (~1–2s)** — leaving **zero background processes** while gaming.
+- **Two Optimization Suites + Submenus (Anti-Cheat Safe)**:
+  - **Step 1 — Choose Suite**:
+    - **`[1]` Standard Laptop**: Everyday responsiveness, SSD/RAM tuning, and battery-life tweaks.
+    - **`[2]` Gaming Laptop**: Includes Standard + **HAGS (`HwSchMode = 2`)**, **Game Mode**, **Game DVR disabled**, **MMCSS gaming scheduler & `NetworkThrottlingIndex`**, and **AC-only PCIe ASPM / USB Selective Suspend off** (preserves VBS/HVCI for anti-cheats and keeps battery savings on DC).
+    - **`[3]` Uninstall & Revert All Changes** *(shown automatically when already installed)*.
+  - **Step 2 — Choose Logon Mode (Submenu for both `[1]` and `[2]`)**:
+    - **`[1]` On-Boot Re-Apply + Background Priority Loop**: Re-applies optimizations at logon via Task Scheduler (headless, no UAC), then runs a foreground priority booster (`AboveNormal`) that **automatically pauses during Direct3D fullscreen games or active anti-cheats**.
+    - **`[2]` Native On-Boot Only (Recommended for Competitive Gamers)**: Re-applies optimizations **once at logon** via Task Scheduler (`conhost.exe --headless`, `RunLevel Highest`, no UAC prompt) and **exits immediately (~1–2s)** — leaving **zero background processes** while playing competitive games with kernel anti-cheats (Riot Vanguard, EasyAntiCheat, BattlEye, FACEIT, Ricochet).
 - **Built-in Uninstall & Full Rollback**: When an existing installation is detected, `RUNME.bat` offers **`[3] Uninstall & Revert All Changes`** (also available via `-Uninstall`), which removes the scheduled task, restores all backed-up registry/service/NTFS/power settings, and deletes `%ProgramFiles%\Opydigital\LaptopOptimizer\`.
 - **Dry-Run Mode**: Inspect detected hardware, install status, and optimization plan without Administrator privileges (`RUNME.bat -DryRun`).
 
@@ -73,8 +78,9 @@ For a complete technical breakdown of every registry key, service, and command, 
 
 | Parameter | Admin Required | Description |
 | :--- | :---: | :--- |
-| `-DryRun` | No | Displays detected hardware, install status, and optimization plan without making any changes. |
-| `-Silent` | Yes | Applies Profile `[2]` (Native On-Boot) without prompts (combine with `-InstallTask` for Profile `[1]`). |
+| `-DryRun` | No | Displays detected hardware (including dGPU), install status, and optimization plan without making any changes. |
+| `-Gaming` | Yes | Enables the Gaming Laptop optimization suite (can be combined with `-DryRun`, `-Silent`, or `-InstallTask`). |
+| `-Silent` | Yes | Applies Native On-Boot without prompts (combine with `-Gaming` and/or `-InstallTask`). |
 | `-Uninstall` | Yes | Removes the scheduled task, reverts all system settings, and deletes `%ProgramFiles%\Opydigital\LaptopOptimizer\`. |
 | `-Revert` | Yes | Restores all backed-up `.reg` files, service states, NTFS behavior, and power settings. |
 | `-InstallTask` | Yes | Registers `Opydigital_LaptopOptimizer` in Profile `[1]` mode (`-BootApply -PriorityLoop`). |

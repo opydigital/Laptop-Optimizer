@@ -3,21 +3,23 @@
 .SYNOPSIS
     Opydigital - Laptop Optimizer for Windows 11.
 .DESCRIPTION
-    Hardware-aware PowerShell optimization utility for Windows 11 laptops and desktops.
-    Detects RAM, storage type (SSD/NVMe vs HDD), and chassis type to apply safe, reversible
-    performance and battery-life tweaks, with mandatory first-run System Restore protection,
-    Program Files installation, native on-boot re-application, optional headless foreground
-    priority loop (with anti-cheat/D3D auto-pause), and full uninstall/rollback.
+    Hardware-aware PowerShell optimization utility for Windows 11 Standard and Gaming laptops.
+    Detects RAM, storage type (SSD/NVMe vs HDD), dedicated GPU, and chassis type to apply safe,
+    reversible performance and battery-life tweaks, with mandatory first-run System Restore
+    protection, Program Files installation, native on-boot re-application, optional headless
+    foreground priority loop (with anti-cheat/D3D auto-pause), and full uninstall/rollback.
 .PARAMETER DryRun
     Detects hardware and previews the optimization plan without modifying the system.
+.PARAMETER Gaming
+    Enables the Gaming Laptop optimization suite (HAGS, Game Mode, Game DVR off, MMCSS, AC PCIe/USB).
 .PARAMETER Revert
     Restores backed-up registry keys, services, NTFS, and power settings.
 .PARAMETER Uninstall
     Stops and removes the scheduled task, reverts all system changes, and deletes the Program Files installation.
 .PARAMETER Silent
-    Applies the Native On-Boot profile without interactive prompts (combine with -InstallTask for Standard + Priority Loop).
+    Applies optimizations without interactive prompts (combine with -Gaming and/or -InstallTask).
 .PARAMETER InstallTask
-    Registers the headless logon task (with priority loop if called standalone or combined with -Silent).
+    Registers the headless logon task with the foreground priority loop.
 .PARAMETER UninstallTask
     Removes the scheduled task without reverting registry/service optimizations.
 .PARAMETER BootApply
@@ -31,6 +33,7 @@
 [CmdletBinding()]
 param(
     [switch]$DryRun,
+    [switch]$Gaming,
     [switch]$Revert,
     [switch]$Uninstall,
     [switch]$Silent,
@@ -44,7 +47,7 @@ param(
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$AppVersion      = '1.0.0'
+$AppVersion      = '1.1.0'
 $InstallDir      = Join-Path $env:ProgramFiles 'Opydigital\LaptopOptimizer'
 $InstalledScript = Join-Path $InstallDir 'LaptopOptimizer.ps1'
 $StateFile       = Join-Path $InstallDir 'install_state.json'
@@ -68,6 +71,7 @@ function Request-Elevation {
         '-File', "`"$PSCommandPath`"",
         '-Elevated'
     )
+    if ($Gaming)        { $argList += '-Gaming' }
     if ($Revert)        { $argList += '-Revert' }
     if ($Uninstall)     { $argList += '-Uninstall' }
     if ($Silent)        { $argList += '-Silent' }
@@ -130,11 +134,11 @@ function Write-Log([string]$Msg) {
 }
 
 function Get-InstallState {
-    $hasScript = Test-Path $InstalledScript
-    $hasTask   = ($null -ne (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) -or
-                 ($null -ne (Get-ScheduledTask -TaskName $LegacyTaskName -ErrorAction SilentlyContinue))
-    $profile   = 'Unknown'
-    $version   = $null
+    $hasScript   = Test-Path $InstalledScript
+    $hasTask     = ($null -ne (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) -or
+                   ($null -ne (Get-ScheduledTask -TaskName $LegacyTaskName -ErrorAction SilentlyContinue))
+    $profile     = 'Unknown'
+    $version     = $null
     $installedAt = $null
 
     if (Test-Path $StateFile) {
@@ -197,6 +201,9 @@ function Get-HardwareProfile {
         'HDD'
     }
 
+    $gpus = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+    $dGpu = ($gpus | Where-Object { $_ -match 'NVIDIA|GeForce|RTX|GTX|Radeon RX|Intel.*Arc' } | Select-Object -First 1)
+
     $chassis = (Get-CimInstance Win32_SystemEnclosure).ChassisTypes
     $isPortable = @($chassis | Where-Object { $_ -in 8,9,10,11,12,14,30,31,32 }).Count -ge 1
     $build = [Environment]::OSVersion.Version.Build
@@ -204,6 +211,8 @@ function Get-HardwareProfile {
     [PSCustomObject]@{
         RAM        = $ramGB
         Disk       = $diskType
+        DedicatedGPU = if ($dGpu) { $dGpu } else { 'None (Integrated)' }
+        HasDGPU    = [bool]$dGpu
         IsPortable = $isPortable
         Build      = $build
         FX         = ($ramGB -le 4)
@@ -301,15 +310,19 @@ function Backup-OriginalState {
     if (-not (Test-Path $BackupDir)) { New-Item -Path $BackupDir -ItemType Directory -Force | Out-Null }
 
     $exports = @{
-        'PriorityControl.reg'  = 'HKLM\SYSTEM\CurrentControlSet\Control\PriorityControl'
-        'MemoryManagement.reg' = 'HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management'
-        'Desktop.reg'          = 'HKCU\Control Panel\Desktop'
-        'ExplorerAdv.reg'      = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
-        'VisualEffects.reg'    = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects'
-        'ContentDelivery.reg'  = 'HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
-        'Svc_DiagTrack.reg'    = 'HKLM\SYSTEM\CurrentControlSet\Services\DiagTrack'
-        'Svc_SysMain.reg'      = 'HKLM\SYSTEM\CurrentControlSet\Services\SysMain'
-        'Svc_WSearch.reg'      = 'HKLM\SYSTEM\CurrentControlSet\Services\WSearch'
+        'PriorityControl.reg'   = 'HKLM\SYSTEM\CurrentControlSet\Control\PriorityControl'
+        'MemoryManagement.reg'  = 'HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management'
+        'Desktop.reg'           = 'HKCU\Control Panel\Desktop'
+        'ExplorerAdv.reg'       = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+        'VisualEffects.reg'     = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects'
+        'ContentDelivery.reg'   = 'HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
+        'GraphicsDrivers.reg'   = 'HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers'
+        'GameBar.reg'           = 'HKCU\Software\Microsoft\GameBar'
+        'GameConfigStore.reg'   = 'HKCU\System\GameConfigStore'
+        'MultimediaProfile.reg' = 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile'
+        'Svc_DiagTrack.reg'     = 'HKLM\SYSTEM\CurrentControlSet\Services\DiagTrack'
+        'Svc_SysMain.reg'       = 'HKLM\SYSTEM\CurrentControlSet\Services\SysMain'
+        'Svc_WSearch.reg'       = 'HKLM\SYSTEM\CurrentControlSet\Services\WSearch'
     }
 
     foreach ($file in $exports.Keys) {
@@ -335,9 +348,12 @@ function Invoke-Revert {
     & reg.exe delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" /v StartupDelayInMSec /f 2>&1 | Out-Null
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy" /v LetAppsRunInBackground /f 2>&1 | Out-Null
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" /v DODownloadMode /f 2>&1 | Out-Null
+    & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\GameDVR" /v AllowGameDVR /f 2>&1 | Out-Null
 
     & fsutil.exe behavior set disablelastaccess 2 2>&1 | Out-Null
     & powercfg.exe /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100 2>&1 | Out-Null
+    & powercfg.exe /setacvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 1 2>&1 | Out-Null
+    & powercfg.exe /setacvalueindex SCHEME_CURRENT SUB_USB USBSELECTIVESUSPEND 1 2>&1 | Out-Null
     & powercfg.exe /setactive SCHEME_CURRENT 2>&1 | Out-Null
 
     if (Test-Path $RestoreMarker) { Remove-Item -Path $RestoreMarker -Force -ErrorAction SilentlyContinue }
@@ -401,7 +417,35 @@ function Apply-NativeTweaks($Hw, [switch]$Quiet) {
     }
 }
 
-function Invoke-Optimize($Hw, [bool]$EnablePriorityLoop) {
+function Apply-GamingTweaks([switch]$Quiet) {
+    # GPU Scheduling (HAGS) + Game Mode + Disable Game DVR background recording
+    Set-RegValue 'HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers' 'HwSchMode' 2 'DWord'
+    Set-RegValue 'HKCU:\Software\Microsoft\GameBar' 'AutoGameModeEnabled' 1 'DWord'
+    Set-RegValue 'HKCU:\System\GameConfigStore' 'GameDVR_Enabled' 0 'DWord'
+    Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR' 'AllowGameDVR' 0 'DWord'
+
+    # MMCSS multimedia/gaming scheduler & network throttling
+    & reg.exe add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" /v NetworkThrottlingIndex /t REG_DWORD /d 0xffffffff /f 2>&1 | Out-Null
+    Set-RegValue 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' 'SystemResponsiveness' 10 'DWord'
+
+    $gamesKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games'
+    Set-RegValue $gamesKey 'GPU Priority' 8 'DWord'
+    Set-RegValue $gamesKey 'Priority' 6 'DWord'
+    Set-RegValue $gamesKey 'Scheduling Category' 'High' 'String'
+    Set-RegValue $gamesKey 'SFIO Priority' 'High' 'String'
+
+    # AC (plugged-in) power tuning: full Turbo Boost, PCIe ASPM off, USB Selective Suspend off
+    & powercfg.exe /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100 2>&1 | Out-Null
+    & powercfg.exe /setacvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 0 2>&1 | Out-Null
+    & powercfg.exe /setacvalueindex SCHEME_CURRENT SUB_USB USBSELECTIVESUSPEND 0 2>&1 | Out-Null
+    & powercfg.exe /setactive SCHEME_CURRENT 2>&1 | Out-Null
+
+    if (-not $Quiet) {
+        Write-Host "  [OK] Gaming Laptop optimizations applied (HAGS, Game Mode, Game DVR off, MMCSS, AC PCIe/USB)" -ForegroundColor Green
+    }
+}
+
+function Invoke-Optimize($Hw, [bool]$EnableGaming, [bool]$EnablePriorityLoop) {
     if (-not (Ensure-RestorePoint)) {
         if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }
         exit 1
@@ -412,12 +456,18 @@ function Invoke-Optimize($Hw, [bool]$EnablePriorityLoop) {
     Install-ToProgramFiles
     Backup-OriginalState
     Apply-NativeTweaks -Hw $Hw
+    if ($EnableGaming) {
+        Apply-GamingTweaks
+    }
 
-    $profileName = if ($EnablePriorityLoop) { 'Standard+Loop' } else { 'NativeOnBoot' }
-    Register-OptimizerTask -IncludePriorityLoop $EnablePriorityLoop
+    $tierName    = if ($EnableGaming) { 'Gaming' } else { 'Standard' }
+    $bootName    = if ($EnablePriorityLoop) { 'On-Boot + Loop' } else { 'Native On-Boot' }
+    $profileName = "$tierName | $bootName"
+
+    Register-OptimizerTask -IncludeGaming $EnableGaming -IncludePriorityLoop $EnablePriorityLoop
     Save-InstallState -ProfileName $profileName
 
-    Write-Log "APPLY | PROFILE=$profileName | RAM=$($Hw.RAM)GB DISK=$($Hw.Disk) PORT=$($Hw.IsPortable) BUILD=$($Hw.Build) | FX=$($Hw.FX) KERN=$($Hw.KERN) SSD=$($Hw.SSDOpt) IDX=$($Hw.IDX) TURBO=$($Hw.TurboDC)"
+    Write-Log "APPLY | PROFILE=$profileName | RAM=$($Hw.RAM)GB DISK=$($Hw.Disk) DGPU=$($Hw.DedicatedGPU) PORT=$($Hw.IsPortable) BUILD=$($Hw.Build)"
 }
 
 # ---------- Scheduled Task, Uninstall & Priority Loop ----------
@@ -461,21 +511,24 @@ function Remove-OptimizerTasks {
     }
 }
 
-function Register-OptimizerTask([bool]$IncludePriorityLoop) {
+function Register-OptimizerTask([bool]$IncludeGaming, [bool]$IncludePriorityLoop) {
     Install-ToProgramFiles
     Remove-OptimizerTasks
 
+    $flags = '-BootApply'
+    if ($IncludeGaming)       { $flags += ' -Gaming' }
+    if ($IncludePriorityLoop) { $flags += ' -PriorityLoop' }
+
     if ($IncludePriorityLoop) {
         Ensure-ExclusionsFile
-        $taskArgs  = "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -BootApply -PriorityLoop"
         $timeLimit = [TimeSpan]::Zero
         $modeDesc  = "headless logon re-apply + foreground priority loop"
     } else {
-        $taskArgs  = "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -BootApply"
         $timeLimit = New-TimeSpan -Minutes 5
         $modeDesc  = "headless one-shot logon re-apply (exits immediately, zero background loop)"
     }
 
+    $taskArgs  = "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" $flags"
     $action    = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument $taskArgs
     $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
     $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
@@ -586,7 +639,10 @@ if ($BootApply -or $PriorityLoop) {
     if ($BootApply) {
         $hwBoot = Get-HardwareProfile
         Apply-NativeTweaks -Hw $hwBoot -Quiet
-        Write-Log "BOOT_APPLY | RAM=$($hwBoot.RAM)GB DISK=$($hwBoot.Disk) PORT=$($hwBoot.IsPortable)"
+        if ($Gaming) {
+            Apply-GamingTweaks -Quiet
+        }
+        Write-Log "BOOT_APPLY | GAMING=$Gaming | RAM=$($hwBoot.RAM)GB DISK=$($hwBoot.Disk) PORT=$($hwBoot.IsPortable)"
     }
     if ($PriorityLoop) {
         Start-PriorityLoop
@@ -605,7 +661,7 @@ if ($Uninstall)     { Invoke-Uninstall;     if ($Elevated -and -not $Silent) { R
 if ($Revert)        { Invoke-Revert;        Write-Log "REVERT | Completed."; if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
 if ($UninstallTask) { Remove-OptimizerTasks; if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
 if ($InstallTask -and -not $Silent) {
-    Register-OptimizerTask -IncludePriorityLoop $true
+    Register-OptimizerTask -IncludeGaming ([bool]$Gaming) -IncludePriorityLoop $true
     if ($Elevated) { Read-Host "`nPress Enter to exit" }
     exit 0
 }
@@ -616,6 +672,7 @@ $state = Get-InstallState
 Write-Section "DETECTED HARDWARE"
 Write-Host ("  Usable RAM .......: {0} GB" -f $hw.RAM) -ForegroundColor White
 Write-Host ("  System Disk ......: {0}" -f $hw.Disk) -ForegroundColor White
+Write-Host ("  Dedicated GPU ....: {0}" -f $hw.DedicatedGPU) -ForegroundColor White
 Write-Host ("  Laptop/Portable ..: {0}" -f $(if ($hw.IsPortable) { 'Yes' } else { 'No' })) -ForegroundColor White
 Write-Host ("  Windows Build ....: {0}" -f $hw.Build) -ForegroundColor White
 if ($state.IsInstalled) {
@@ -626,13 +683,14 @@ if ($state.IsInstalled) {
 }
 Write-Host ""
 
-Write-Section "OPTIMIZATION PLAN"
+Write-Section "HARDWARE-ADAPTIVE PLAN"
 Write-PlanRow "Base (timeouts, NTFS, DO, DiagTrack)"   $true       "[Always]"
 Write-PlanRow "Minimal visual effects (+ClearType)"    $hw.FX      "[RAM <= 4 GB]"
 Write-PlanRow "Resident kernel in RAM"                 $hw.KERN    "[RAM >= 16 GB]"
 Write-PlanRow "SSD optimizations (SysMain / Boot)"     $hw.SSDOpt  "[SSD / NVMe]"
 Write-PlanRow "On-demand Search indexing"              $hw.IDX     "[RAM <= 4 GB]"
 Write-PlanRow "Disable Turbo Boost on battery"         $hw.TurboDC "[Laptop]"
+Write-PlanRow "Gaming Suite (HAGS, DVR, MMCSS, AC)"    ([bool]$Gaming) "[Menu Option 2 / -Gaming]"
 Write-Host ""
 
 if ($DryRun) {
@@ -640,20 +698,21 @@ if ($DryRun) {
     exit 0
 }
 
-$enableLoop = [bool]$InstallTask
+$enableGaming = [bool]$Gaming
+$enableLoop   = [bool]$InstallTask
+
 if (-not $Silent) {
-    Write-Section "SELECT ACTION / PROFILE"
+    # Step 1: Select Laptop Category or Uninstall
+    Write-Section "STEP 1 - SELECT OPTIMIZATION SUITE"
     Write-Host "  [1] " -ForegroundColor Cyan -NoNewline
-    Write-Host "Standard + Background Priority Loop" -ForegroundColor White
-    Write-Host "      Re-applies native optimizations at logon + runs headless foreground" -ForegroundColor Gray
-    Write-Host "      priority booster (auto-pauses during D3D fullscreen & anti-cheats)." -ForegroundColor Gray
+    Write-Host "Standard Laptop" -ForegroundColor White
+    Write-Host "      Everyday responsiveness, SSD/RAM tuning, and battery-life tweaks." -ForegroundColor Gray
     Write-Host ""
-    Write-Host "  [2] " -ForegroundColor Green -NoNewline
-    Write-Host "Native On-Boot Only (Recommended for Competitive Gamers)" -ForegroundColor White
-    Write-Host "      Re-applies native Windows optimizations once at logon via Task" -ForegroundColor Gray
-    Write-Host "      Scheduler (no UAC) and exits immediately — ZERO background loop." -ForegroundColor Gray
-    Write-Host "      Recommended for games with kernel anti-cheats (Riot Vanguard," -ForegroundColor Yellow
-    Write-Host "      EasyAntiCheat, BattlEye, FACEIT, Ricochet)." -ForegroundColor Yellow
+    Write-Host "  [2] " -ForegroundColor Magenta -NoNewline
+    Write-Host "Gaming Laptop" -ForegroundColor White
+    Write-Host "      Includes Standard + HAGS, Game Mode, Game DVR off, MMCSS gaming" -ForegroundColor Gray
+    Write-Host "      priorities, NetworkThrottling off, and AC PCIe/USB tuning" -ForegroundColor Gray
+    Write-Host "      (keeps battery savings on DC; preserves VBS/HVCI for anti-cheats)." -ForegroundColor Gray
     Write-Host ""
     if ($state.IsInstalled) {
         Write-Host "  [3] " -ForegroundColor Red -NoNewline
@@ -666,11 +725,11 @@ if (-not $Silent) {
     Write-Host "Cancel" -ForegroundColor Gray
     Write-Host ""
 
-    $prompt = if ($state.IsInstalled) { "Choose an option [1 / 2 / 3 / 0]" } else { "Choose an option [1 / 2 / 0]" }
-    $choice = Read-Host $prompt
-    switch ($choice) {
-        '1' { $enableLoop = $true }
-        '2' { $enableLoop = $false }
+    $step1Prompt = if ($state.IsInstalled) { "Choose an option [1 / 2 / 3 / 0]" } else { "Choose an option [1 / 2 / 0]" }
+    $suiteChoice = Read-Host $step1Prompt
+    switch ($suiteChoice) {
+        '1' { $enableGaming = $false }
+        '2' { $enableGaming = $true }
         '3' {
             if ($state.IsInstalled) {
                 Invoke-Uninstall
@@ -687,9 +746,40 @@ if (-not $Silent) {
             exit 0
         }
     }
+
+    # Step 2: Submenu — Select Background / Boot Mode
+    $selectedLabel = if ($enableGaming) { 'GAMING LAPTOP' } else { 'STANDARD LAPTOP' }
+    Write-Host ""
+    Write-Section "STEP 2 - LOGON MODE ($selectedLabel)"
+    Write-Host "  [1] " -ForegroundColor Cyan -NoNewline
+    Write-Host "On-Boot Re-Apply + Background Priority Loop" -ForegroundColor White
+    Write-Host "      Re-applies optimizations at logon + runs headless foreground priority" -ForegroundColor Gray
+    Write-Host "      booster (auto-pauses during D3D fullscreen games & active anti-cheats)." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  [2] " -ForegroundColor Green -NoNewline
+    Write-Host "Native On-Boot Only (Recommended for Competitive Gamers)" -ForegroundColor White
+    Write-Host "      Re-applies optimizations once at logon via Task Scheduler (no UAC)" -ForegroundColor Gray
+    Write-Host "      and exits immediately (~1-2s) — ZERO background loop." -ForegroundColor Gray
+    Write-Host "      Recommended for games with kernel anti-cheats (Riot Vanguard," -ForegroundColor Yellow
+    Write-Host "      EasyAntiCheat, BattlEye, FACEIT, Ricochet)." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  [0] " -ForegroundColor DarkGray -NoNewline
+    Write-Host "Cancel" -ForegroundColor Gray
+    Write-Host ""
+
+    $modeChoice = Read-Host "Choose logon mode [1 / 2 / 0]"
+    switch ($modeChoice) {
+        '1' { $enableLoop = $true }
+        '2' { $enableLoop = $false }
+        default {
+            Write-Host "  Cancelled. No changes were made." -ForegroundColor Yellow
+            if ($Elevated) { Read-Host "`nPress Enter to exit" }
+            exit 0
+        }
+    }
 }
 
-Invoke-Optimize $hw $enableLoop
+Invoke-Optimize -Hw $hw -EnableGaming $enableGaming -EnablePriorityLoop $enableLoop
 Write-Host "`n  Done! Restart Windows to apply all changes." -ForegroundColor Cyan
 Write-Host "  Installed path: $InstalledScript" -ForegroundColor Gray
 if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }

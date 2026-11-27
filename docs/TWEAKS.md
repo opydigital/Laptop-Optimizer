@@ -60,6 +60,21 @@ Before any tweak is applied on the first run:
 - Detected via `Win32_SystemEnclosure.ChassisTypes` (`8, 9, 10, 11, 12, 14, 30, 31, 32`).
 - Activates `SCHEME_BALANCED` and sets `PROCTHROTTLEMAX = 99` on **DC (battery)** only, disabling CPU Turbo Boost on battery to reduce heat, fan noise, and power draw while keeping 100% performance on AC power.
 
+### Gaming Laptop Suite (`-Gaming` / Menu Option `[2]`)
+- `HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\HwSchMode = 2` (enables Hardware-Accelerated GPU Scheduling / HAGS).
+- `HKCU\Software\Microsoft\GameBar\AutoGameModeEnabled = 1` (ensures Windows Game Mode is enabled).
+- `HKCU\System\GameConfigStore\GameDVR_Enabled = 0` and `HKLM\SOFTWARE\Policies\Microsoft\Windows\GameDVR\AllowGameDVR = 0` (disables background Game DVR recording without removing Game Bar).
+- `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile`:
+  - `NetworkThrottlingIndex = 0xffffffff` (disables multimedia network packet throttling).
+  - `SystemResponsiveness = 10` (reduces background reservation while keeping audio stable).
+- `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games`:
+  - `GPU Priority = 8`, `Priority = 6`, `Scheduling Category = High`, `SFIO Priority = High`.
+- AC (plugged-in) power tuning via `powercfg`:
+  - `PROCTHROTTLEMAX = 100` (full Turbo Boost on AC; DC battery limit `99` preserved).
+  - `SUB_PCIEXPRESS ASPM = 0` (disables PCIe Link State Power Management on AC to prevent dGPU micro-stutters).
+  - `SUB_USB USBSELECTIVESUSPEND = 0` (disables USB Selective Suspend on AC for high-polling gaming mice/headsets).
+- **Anti-Cheat Safe by Design**: VBS/HVCI (Memory Integrity), TPM, and `pagefile.sys` are intentionally left untouched so competitive titles (Riot Vanguard, FACEIT, EAC, BattlEye) continue working without issues.
+
 ---
 
 ## 4. Program Files Installation & Headless Logon Task (`Opydigital_LaptopOptimizer`)
