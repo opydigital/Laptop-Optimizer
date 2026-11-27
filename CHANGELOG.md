@@ -16,6 +16,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - One-click `INSTALL.bat` launcher with automatic `ExecutionPolicy Bypass` and argument forwarding.
 - Automatic UAC self-elevation (`Start-Process -Verb RunAs`) so `LaptopOptimizer.ps1` can be launched directly from a standard user PowerShell window.
 - Persistent installation to `%ProgramFiles%\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1` on first run, with automatic Scheduled Task registration pointing to the installed copy.
-- Headless logon Scheduled Task (`conhost.exe --headless`) for dynamic foreground process priority boosting (`AboveNormal`), with built-in system/anti-cheat exclusions and user-configurable `priority_exclusions.txt`.
+- Opt-in headless logon Scheduled Task (`conhost.exe --headless`) for dynamic foreground process priority boosting (`AboveNormal`), with automatic pause during Direct3D fullscreen games or active anti-cheats, built-in system/anti-cheat exclusions, and user-configurable `priority_exclusions.txt`.
 - ClearType font-smoothing preservation when applying minimal visual effects on `<= 4 GB` RAM systems.
 - English documentation (`README.md`, `docs/TWEAKS.md`, `CONTRIBUTING.md`, `priority_exclusions.example.txt`).

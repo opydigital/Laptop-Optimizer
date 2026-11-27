@@ -62,13 +62,15 @@ Before any tweak is applied on the first run:
 
 ---
 
-## 4. Program Files Installation & Headless Logon Priority Loop
+## 4. Program Files Installation & Optional Headless Logon Priority Loop
 
 - On first install (or when running `-InstallTask`), `LaptopOptimizer.ps1` copies itself to `%ProgramFiles%\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1`.
 - Backups (`backup_tweaks/`), logs (`tweaks_log.txt`), and exclusions (`priority_exclusions.txt`) are stored in `%ProgramFiles%\Opydigital\LaptopOptimizer\`.
+- The logon priority loop is **opt-in** (prompted during interactive setup or enabled via `-InstallTask`).
 - Registers task `Opydigital_PriorityLoop` triggered `AtLogOn` for the current user (`LogonType Interactive`, `RunLevel Highest`, unlimited execution time, `MultipleInstances IgnoreNew`).
 - Launches via `conhost.exe --headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ProgramFiles%\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1" -PriorityLoop` so no console window or taskbar button appears.
-- Polls `GetForegroundWindow()` every 2 seconds, elevates the active non-excluded process from `Normal` to `AboveNormal`, and restores the previously boosted process back to `Normal`.
+- **Anti-Cheat & Fullscreen Game Auto-Pause**: Before modifying any process priority, checks `SHQueryUserNotificationState` (`QUNS_BUSY` / `QUNS_RUNNING_D3D_FULL_SCREEN`) and active anti-cheat services (`vgc`, `EasyAntiCheat`, `EasyAntiCheat_EOS`, `BEService`, `BEDaisy`, `FACEIT`, `EAAntiCheat`, `xhunter1`, `HoYoKProtect`). If detected, restores any boosted process to `Normal` and pauses without opening game process handles.
+- Otherwise polls `GetForegroundWindow()` every 2 seconds, elevates the active non-excluded process from `Normal` to `AboveNormal`, and restores the previously boosted process back to `Normal`.
 
 ---
 

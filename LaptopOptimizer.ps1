@@ -348,7 +348,15 @@ function Invoke-Optimize($Hw) {
         Write-Host "  [OK] CPU Turbo Boost disabled on battery (Laptop)" -ForegroundColor Green
     }
 
-    Install-PriorityTask
+    if (-not $Silent) {
+        Write-Host ""
+        $taskResp = Read-Host "Install optional headless logon priority loop? (Auto-pauses during games/anti-cheat) [Y/N]"
+        if ($taskResp -in @('Y','y','Yes','yes')) {
+            Install-PriorityTask
+        } else {
+            Write-Host "  [--] Skipped scheduled task (you can enable it later with -InstallTask)." -ForegroundColor DarkGray
+        }
+    }
 
     Write-Log "APPLY | RAM=$($Hw.RAM)GB DISK=$($Hw.Disk) PORT=$($Hw.IsPortable) BUILD=$($Hw.Build) | FX=$($Hw.FX) KERN=$($Hw.KERN) SSD=$($Hw.SSDOpt) IDX=$($Hw.IDX) TURBO=$($Hw.TurboDC)"
 }
@@ -410,12 +418,37 @@ using System.Runtime.InteropServices;
 public class Win32Focus {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("shell32.dll")] public static extern int SHQueryUserNotificationState(out int pquns);
 }
 "@
     $protected = Get-ExcludedProcesses
+    $antiCheatWatch = @(
+        'vgc','EasyAntiCheat','EasyAntiCheat_EOS','BEService','BEDaisy',
+        'FACEIT','FACEITService','EAAntiCheat.GameService','EAAntiCheat.GameServiceLauncher',
+        'xhunter1','HoYoKProtect'
+    )
     $lastPid = 0
 
     while ($true) {
+        # Auto-pause when a D3D fullscreen app/game or active kernel anti-cheat is detected
+        $notifState = 0
+        $isFullscreen = ([Win32Focus]::SHQueryUserNotificationState([ref]$notifState) -eq 0) -and ($notifState -in 2, 3)
+        $hasAntiCheat = $null -ne (Get-Process -Name $antiCheatWatch -ErrorAction SilentlyContinue)
+
+        if ($isFullscreen -or $hasAntiCheat) {
+            if ($lastPid -gt 4) {
+                try {
+                    $prevProc = Get-Process -Id $lastPid -ErrorAction SilentlyContinue
+                    if ($prevProc -and $prevProc.PriorityClass -eq 'AboveNormal') {
+                        $prevProc.PriorityClass = 'Normal'
+                    }
+                } catch {}
+                $lastPid = 0
+            }
+            Start-Sleep -Seconds 5
+            continue
+        }
+
         $hwnd = [Win32Focus]::GetForegroundWindow()
         if ($hwnd -ne [IntPtr]::Zero) {
             [uint32]$fgPid = 0
