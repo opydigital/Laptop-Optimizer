@@ -493,8 +493,7 @@ function Apply-GamingTweaks([switch]$Quiet) {
 
 function Invoke-Optimize($Hw, [bool]$EnableGaming, [bool]$EnablePriorityLoop) {
     if (-not (Ensure-RestorePoint)) {
-        if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }
-        exit 1
+        return $false
     }
 
     Write-Host ""
@@ -514,6 +513,7 @@ function Invoke-Optimize($Hw, [bool]$EnableGaming, [bool]$EnablePriorityLoop) {
     Save-InstallState -ProfileName $profileName
 
     Write-Log "APPLY | PROFILE=$profileName | RAM=$($Hw.RAM)GB DISK=$($Hw.Disk) DGPU=$($Hw.DedicatedGPU) PORT=$($Hw.IsPortable) BUILD=$($Hw.Build)"
+    return $true
 }
 
 # ---------- Interactive Windows 11 Debloat (WinUtil-based) ----------
@@ -906,44 +906,54 @@ if ($InstallTask -and -not $Silent) {
     exit 0
 }
 
-$hw    = Get-HardwareProfile
-$state = Get-InstallState
+function Show-HardwareSummary($Hw, $State) {
+    Write-Section "DETECTED HARDWARE"
+    Write-Host ("  Usable RAM .......: {0} GB" -f $Hw.RAM) -ForegroundColor White
+    Write-Host ("  System Disk ......: {0}" -f $Hw.Disk) -ForegroundColor White
+    Write-Host ("  Dedicated GPU ....: {0}" -f $Hw.DedicatedGPU) -ForegroundColor White
+    Write-Host ("  Laptop/Portable ..: {0}" -f $(if ($Hw.IsPortable) { 'Yes' } else { 'No' })) -ForegroundColor White
+    Write-Host ("  Windows Build ....: {0}" -f $Hw.Build) -ForegroundColor White
+    if ($State.IsInstalled) {
+        $verStr = if ($State.Version) { "v$($State.Version)" } else { "installed" }
+        Write-Host ("  Install Status ...: Installed ({0} | Profile: {1})" -f $verStr, $State.Profile) -ForegroundColor Green
+    } else {
+        Write-Host "  Install Status ...: Not installed" -ForegroundColor DarkGray
+    }
+    Write-Host ""
 
-Write-Section "DETECTED HARDWARE"
-Write-Host ("  Usable RAM .......: {0} GB" -f $hw.RAM) -ForegroundColor White
-Write-Host ("  System Disk ......: {0}" -f $hw.Disk) -ForegroundColor White
-Write-Host ("  Dedicated GPU ....: {0}" -f $hw.DedicatedGPU) -ForegroundColor White
-Write-Host ("  Laptop/Portable ..: {0}" -f $(if ($hw.IsPortable) { 'Yes' } else { 'No' })) -ForegroundColor White
-Write-Host ("  Windows Build ....: {0}" -f $hw.Build) -ForegroundColor White
-if ($state.IsInstalled) {
-    $verStr = if ($state.Version) { "v$($state.Version)" } else { "installed" }
-    Write-Host ("  Install Status ...: Installed ({0} | Profile: {1})" -f $verStr, $state.Profile) -ForegroundColor Green
-} else {
-    Write-Host "  Install Status ...: Not installed" -ForegroundColor DarkGray
+    Write-Section "HARDWARE-ADAPTIVE PLAN"
+    Write-PlanRow "Base (timeouts, NTFS, DO, DiagTrack)"   $true           "[Always]"
+    Write-PlanRow "Minimal visual effects (+ClearType)"    $Hw.FX          "[RAM <= 4 GB]"
+    Write-PlanRow "Resident kernel in RAM"                 $Hw.KERN        "[RAM >= 16 GB]"
+    Write-PlanRow "SSD optimizations (SysMain / Boot)"     $Hw.SSDOpt      "[SSD / NVMe]"
+    Write-PlanRow "On-demand Search indexing"              $Hw.IDX         "[RAM <= 4 GB]"
+    Write-PlanRow "Laptop battery (Turbo DC, S0 fix, %)"  $Hw.TurboDC     "[Laptop]"
+    Write-PlanRow "Gaming Suite (HAGS, DVR, MMCSS, AC)"    ([bool]$Gaming) "[Menu Option 2 / -Gaming]"
+    Write-Host ""
 }
-Write-Host ""
 
-Write-Section "HARDWARE-ADAPTIVE PLAN"
-Write-PlanRow "Base (timeouts, NTFS, DO, DiagTrack)"   $true       "[Always]"
-Write-PlanRow "Minimal visual effects (+ClearType)"    $hw.FX      "[RAM <= 4 GB]"
-Write-PlanRow "Resident kernel in RAM"                 $hw.KERN    "[RAM >= 16 GB]"
-Write-PlanRow "SSD optimizations (SysMain / Boot)"     $hw.SSDOpt  "[SSD / NVMe]"
-Write-PlanRow "On-demand Search indexing"              $hw.IDX     "[RAM <= 4 GB]"
-Write-PlanRow "Laptop battery (Turbo DC, S0 fix, %)"  $hw.TurboDC "[Laptop]"
-Write-PlanRow "Gaming Suite (HAGS, DVR, MMCSS, AC)"    ([bool]$Gaming) "[Menu Option 2 / -Gaming]"
-Write-Host ""
+$hw = Get-HardwareProfile
 
 if ($DryRun) {
+    $state = Get-InstallState
+    Show-HardwareSummary -Hw $hw -State $state
     Write-Host "  [DRY-RUN] No changes were made to the system." -ForegroundColor Yellow
     exit 0
 }
 
-$enableGaming = [bool]$Gaming
-$enableLoop   = [bool]$InstallTask
+if ($Silent) {
+    $ok = Invoke-Optimize -Hw $hw -EnableGaming ([bool]$Gaming) -EnablePriorityLoop ([bool]$InstallTask)
+    if (-not $ok) { exit 1 }
+    exit 0
+}
 
-if (-not $Silent) {
-    # Step 1: Select Laptop Category or Uninstall
-    Write-Section "STEP 1 - SELECT OPTIMIZATION SUITE"
+# Interactive Main Menu Loop
+while ($true) {
+    Write-Banner
+    $state = Get-InstallState
+    Show-HardwareSummary -Hw $hw -State $state
+
+    Write-Section "MAIN MENU"
     Write-Host "  [1] " -ForegroundColor Cyan -NoNewline
     Write-Host "Standard Laptop" -ForegroundColor White
     Write-Host "      Everyday responsiveness, SSD/RAM tuning, and battery-life tweaks." -ForegroundColor Gray
@@ -967,40 +977,49 @@ if (-not $Silent) {
         Write-Host ""
     }
     Write-Host "  [0] " -ForegroundColor DarkGray -NoNewline
-    Write-Host "Cancel" -ForegroundColor Gray
+    Write-Host "Exit" -ForegroundColor Gray
     Write-Host ""
 
-    $step1Prompt = if ($state.IsInstalled) { "Choose an option [1 / 2 / 3 / 4 / 0]" } else { "Choose an option [1 / 2 / 3 / 0]" }
-    $suiteChoice = Read-Host $step1Prompt
-    switch ($suiteChoice) {
-        '1' { $enableGaming = $false }
-        '2' { $enableGaming = $true }
-        '3' {
-            Invoke-DebloatWizard
-            if ($Elevated) { Read-Host "`nPress Enter to exit" }
-            exit 0
-        }
-        '4' {
-            if ($state.IsInstalled) {
-                Invoke-Uninstall
-                if ($Elevated) { Read-Host "`nPress Enter to exit" }
-                exit 0
-            }
-            Write-Host "  Cancelled. No changes were made." -ForegroundColor Yellow
-            if ($Elevated) { Read-Host "`nPress Enter to exit" }
-            exit 0
-        }
-        default {
-            Write-Host "  Cancelled. No changes were made." -ForegroundColor Yellow
-            if ($Elevated) { Read-Host "`nPress Enter to exit" }
-            exit 0
-        }
+    $menuPrompt = if ($state.IsInstalled) { "Choose an option [1 / 2 / 3 / 4 / 0]" } else { "Choose an option [1 / 2 / 3 / 0]" }
+    $suiteChoice = Read-Host $menuPrompt
+
+    if ($suiteChoice -eq '0') {
+        break
     }
 
-    # Step 2: Submenu — Select Background / Boot Mode
+    if ($suiteChoice -eq '3') {
+        Write-Host ""
+        Invoke-DebloatWizard
+        Read-Host "`nPress Enter to return to Main Menu" | Out-Null
+        continue
+    }
+
+    if ($suiteChoice -eq '4' -and $state.IsInstalled) {
+        Write-Host ""
+        $runningFromInstallDir = [System.IO.Path]::GetFullPath($PSCommandPath).StartsWith(
+            [System.IO.Path]::GetFullPath($InstallDir),
+            [StringComparison]::OrdinalIgnoreCase
+        )
+        Invoke-Uninstall
+        if ($runningFromInstallDir) {
+            break
+        }
+        Read-Host "`nPress Enter to return to Main Menu" | Out-Null
+        continue
+    }
+
+    if ($suiteChoice -notin @('1','2')) {
+        Write-Host "  [!] Invalid option." -ForegroundColor Yellow
+        Start-Sleep -Seconds 1
+        continue
+    }
+
+    $enableGaming  = ($suiteChoice -eq '2')
     $selectedLabel = if ($enableGaming) { 'GAMING LAPTOP' } else { 'STANDARD LAPTOP' }
+
+    # Step 2: Submenu — Select Background / Boot Mode (no Exit here, only Back to Main Menu)
     Write-Host ""
-    Write-Section "STEP 2 - LOGON MODE ($selectedLabel)"
+    Write-Section "LOGON MODE ($selectedLabel)"
     Write-Host "  [1] " -ForegroundColor Cyan -NoNewline
     Write-Host "On-Boot Re-Apply + Background Priority Loop" -ForegroundColor White
     Write-Host "      Re-applies optimizations at logon + runs headless foreground priority" -ForegroundColor Gray
@@ -1014,22 +1033,20 @@ if (-not $Silent) {
     Write-Host "      EasyAntiCheat, BattlEye, FACEIT, Ricochet)." -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  [0] " -ForegroundColor DarkGray -NoNewline
-    Write-Host "Cancel" -ForegroundColor Gray
+    Write-Host "Back to Main Menu" -ForegroundColor Gray
     Write-Host ""
 
     $modeChoice = Read-Host "Choose logon mode [1 / 2 / 0]"
-    switch ($modeChoice) {
-        '1' { $enableLoop = $true }
-        '2' { $enableLoop = $false }
-        default {
-            Write-Host "  Cancelled. No changes were made." -ForegroundColor Yellow
-            if ($Elevated) { Read-Host "`nPress Enter to exit" }
-            exit 0
-        }
+    if ($modeChoice -notin @('1','2')) {
+        continue
     }
-}
 
-Invoke-Optimize -Hw $hw -EnableGaming $enableGaming -EnablePriorityLoop $enableLoop
-Write-Host "`n  Done! Restart Windows to apply all changes." -ForegroundColor Cyan
-Write-Host "  Installed path: $InstalledScript" -ForegroundColor Gray
-if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }
+    $enableLoop = ($modeChoice -eq '1')
+    Write-Host ""
+    $ok = Invoke-Optimize -Hw $hw -EnableGaming $enableGaming -EnablePriorityLoop $enableLoop
+    if ($ok) {
+        Write-Host "`n  Done! Restart Windows to apply all changes." -ForegroundColor Cyan
+        Write-Host "  Installed path: $InstalledScript" -ForegroundColor Gray
+    }
+    Read-Host "`nPress Enter to return to Main Menu" | Out-Null
+}
