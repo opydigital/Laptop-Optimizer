@@ -41,6 +41,7 @@ A lightweight, hardware-aware PowerShell utility to optimize **Windows 11 laptop
 | **Resident Kernel in RAM** | `RAM >= 16 GB` | Sets `DisablePagingExecutive = 1` to keep kernel-mode drivers in physical memory. |
 | **SSD / NVMe Optimizations** | `Disk == SSD/NVMe` | Disables `SysMain` (Superfetch) and sets `StartupDelayInMSec = 0` for faster post-login app startup. |
 | **Laptop Battery & Standby** | `Laptop / Portable` | Activates Balanced plan, limits CPU Turbo Boost on battery (`PROCTHROTTLEMAX = 99`), disables S0 Modern Standby network drain on battery (`DCSettingIndex = 0`), and enables numeric tray battery percentage. |
+| **Gaming Laptop Suite** | Menu `[2]` / `-Gaming` | Enables HAGS (`HwSchMode = 2`) & Game Mode, disables Game DVR background recording, tunes MMCSS (`NetworkThrottlingIndex = 0xffffffff`, `SystemResponsiveness = 10`, `Tasks\Games`), and disables AC PCIe ASPM & USB Selective Suspend while keeping VBS/HVCI untouched. |
 
 For a complete technical breakdown of every registry key, service, and command, see [docs/TWEAKS.md](docs/TWEAKS.md).
 
@@ -58,16 +59,20 @@ For a complete technical breakdown of every registry key, service, and command, 
 ### Option A — One-Click Launcher (Recommended)
 
 1. Download `RUNME.bat` and `LaptopOptimizer.ps1` into the same folder (or clone the repository).
-2. **Double-click `RUNME.bat`** — it automatically requests UAC elevation, shows your hardware & current install status, and lets you choose Profile `[1]`, Profile `[2]`, or `[3] Uninstall & Revert` (when already installed).
+2. **Double-click `RUNME.bat`** — it opens maximized, automatically requests UAC elevation, shows your hardware & install status, and lets you choose **`[1]` Standard Laptop**, **`[2]` Gaming Laptop**, **`[3]` Windows 11 Debloat Wizard**, or **`[4]` Uninstall & Revert** (when already installed).
 
 ### Option B — PowerShell CLI
 
 ```powershell
 # Preview without changes (no admin required)
 .\RUNME.bat -DryRun
+.\RUNME.bat -DryRun -Gaming
 
-# Interactive setup / profile switch / uninstall
+# Interactive menu (Standard / Gaming / Debloat / Uninstall)
 .\RUNME.bat
+
+# Launch the interactive Windows 11 Debloat wizard directly
+.\RUNME.bat -Debloat
 
 # Full uninstall and rollback from CLI
 .\RUNME.bat -Uninstall
@@ -92,9 +97,9 @@ For a complete technical breakdown of every registry key, service, and command, 
 
 ---
 
-## Process Exclusions (Profile 1 Priority Loop)
+## Process Exclusions (Priority Loop Mode)
 
-When Profile `[1]` is selected, critical Windows processes (`dwm`, `explorer`, `audiodg`, `MsMpEng`, etc.) and common anti-cheat services (`vgc`, `EasyAntiCheat`, `BEService`, `FACEIT`, etc.) are excluded by default, and the loop automatically pauses during fullscreen Direct3D games or active anti-cheats.
+When Logon Mode `[1]` (**On-Boot Re-Apply + Background Priority Loop**) is selected in either the Standard or Gaming suite, critical Windows processes (`dwm`, `explorer`, `audiodg`, `MsMpEng`, etc.) and common anti-cheat services (`vgc`, `EasyAntiCheat`, `BEService`, `FACEIT`, etc.) are excluded by default, and the loop automatically pauses during fullscreen Direct3D games or active anti-cheats.
 
 To exclude additional apps, edit `%ProgramFiles%\Opydigital\LaptopOptimizer\priority_exclusions.txt` (one process name per line, without `.exe`) — see [priority_exclusions.example.txt](priority_exclusions.example.txt).
 
