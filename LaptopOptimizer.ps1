@@ -76,7 +76,7 @@ function Request-Elevation {
 
     try {
         Write-Host "  [*] Requesting Administrator privileges (UAC)..." -ForegroundColor Yellow
-        Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -Verb RunAs -ErrorAction Stop
+        Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -Verb RunAs -WindowStyle Maximized -ErrorAction Stop
         exit 0
     } catch {
         Write-Host "  [!] Administrator elevation is required and was cancelled." -ForegroundColor Red
@@ -84,7 +84,25 @@ function Request-Elevation {
     }
 }
 
+function Set-WindowMaximized {
+    try {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32Console {
+    [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+"@ -ErrorAction SilentlyContinue
+        $hwnd = [Win32Console]::GetConsoleWindow()
+        if ($hwnd -ne [IntPtr]::Zero) {
+            [void][Win32Console]::ShowWindow($hwnd, 3) # SW_MAXIMIZE
+        }
+    } catch {}
+}
+
 function Write-Banner {
+    Set-WindowMaximized
     try { Clear-Host } catch {}
     Write-Host "╔════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
     Write-Host "║               OPYDIGITAL - LAPTOP OPTIMIZER                ║" -ForegroundColor Cyan
