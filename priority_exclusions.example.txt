@@ -1,0 +1,7 @@
+# One process name per line (without .exe) to exclude from the foreground priority loop.
+# Copy or rename this file to priority_exclusions.txt (or run -InstallTask to auto-create it).
+#
+# Examples of games or anti-cheat protected applications:
+# VALORANT-Win64-Shipping
+# FortniteClient-Win64-Shipping
+# cs2
