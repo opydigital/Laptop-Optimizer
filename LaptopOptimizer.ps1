@@ -5,20 +5,25 @@
 .DESCRIPTION
     Hardware-aware PowerShell optimization utility for Windows 11 laptops and desktops.
     Detects RAM, storage type (SSD/NVMe vs HDD), and chassis type to apply safe, reversible
-    performance and battery-life tweaks, with mandatory first-run System Restore protection
-    and an optional headless logon foreground-priority booster.
+    performance and battery-life tweaks, with mandatory first-run System Restore protection,
+    Program Files installation, native on-boot re-application, optional headless foreground
+    priority loop (with anti-cheat/D3D auto-pause), and full uninstall/rollback.
 .PARAMETER DryRun
     Detects hardware and previews the optimization plan without modifying the system.
 .PARAMETER Revert
     Restores backed-up registry keys, services, NTFS, and power settings.
+.PARAMETER Uninstall
+    Stops and removes the scheduled task, reverts all system changes, and deletes the Program Files installation.
 .PARAMETER Silent
-    Applies the optimization plan without interactive confirmation prompts.
+    Applies the Native On-Boot profile without interactive prompts (combine with -InstallTask for Standard + Priority Loop).
 .PARAMETER InstallTask
-    Registers a headless Windows Scheduled Task at user logon for the foreground priority loop.
+    Registers the headless logon task (with priority loop if called standalone or combined with -Silent).
 .PARAMETER UninstallTask
-    Removes the scheduled foreground priority loop task.
+    Removes the scheduled task without reverting registry/service optimizations.
+.PARAMETER BootApply
+    Internal switch invoked by Task Scheduler at logon to silently re-apply native tweaks and exit.
 .PARAMETER PriorityLoop
-    Internal switch invoked by the Scheduled Task to run the background priority loop.
+    Internal switch invoked by Task Scheduler to run the background foreground priority loop.
 .NOTES
     License: GNU General Public License v3.0 (GPL-3.0)
     Repository: https://github.com/opydigital/Laptop-Optimizer
@@ -27,9 +32,11 @@
 param(
     [switch]$DryRun,
     [switch]$Revert,
+    [switch]$Uninstall,
     [switch]$Silent,
     [switch]$InstallTask,
     [switch]$UninstallTask,
+    [switch]$BootApply,
     [switch]$PriorityLoop,
     [switch]$Elevated
 )
@@ -37,15 +44,18 @@ param(
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+$AppVersion      = '1.0.0'
 $InstallDir      = Join-Path $env:ProgramFiles 'Opydigital\LaptopOptimizer'
 $InstalledScript = Join-Path $InstallDir 'LaptopOptimizer.ps1'
+$StateFile       = Join-Path $InstallDir 'install_state.json'
 $BackupDir       = Join-Path $InstallDir 'backup_tweaks'
 $RestoreMarker   = Join-Path $BackupDir 'restore_point.ok'
 $LogFile         = Join-Path $InstallDir 'tweaks_log.txt'
 $ExclusionsFile  = Join-Path $InstallDir 'priority_exclusions.txt'
-$TaskName        = 'Opydigital_PriorityLoop'
+$TaskName        = 'Opydigital_LaptopOptimizer'
+$LegacyTaskName  = 'Opydigital_PriorityLoop'
 
-# ---------- Visual Helpers ----------
+# ---------- Helpers ----------
 function Test-IsAdmin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
     return ([Security.Principal.WindowsPrincipal]$id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -59,6 +69,7 @@ function Request-Elevation {
         '-Elevated'
     )
     if ($Revert)        { $argList += '-Revert' }
+    if ($Uninstall)     { $argList += '-Uninstall' }
     if ($Silent)        { $argList += '-Silent' }
     if ($InstallTask)   { $argList += '-InstallTask' }
     if ($UninstallTask) { $argList += '-UninstallTask' }
@@ -70,21 +81,6 @@ function Request-Elevation {
     } catch {
         Write-Host "  [!] Administrator elevation is required and was cancelled." -ForegroundColor Red
         exit 1
-    }
-}
-
-function Install-ToProgramFiles {
-    if (-not (Test-Path $InstallDir)) {
-        New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null
-    }
-    $sameFile = [string]::Equals(
-        [System.IO.Path]::GetFullPath($PSCommandPath),
-        [System.IO.Path]::GetFullPath($InstalledScript),
-        [StringComparison]::OrdinalIgnoreCase
-    )
-    if (-not $sameFile) {
-        Copy-Item -Path $PSCommandPath -Destination $InstalledScript -Force
-        Write-Host "  [OK] Script installed to: $InstalledScript" -ForegroundColor Green
     }
 }
 
@@ -113,6 +109,57 @@ function Write-Log([string]$Msg) {
     if (-not (Test-Path $InstallDir)) { New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null }
     $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     Add-Content -Path $LogFile -Value "[$ts] $Msg" -Encoding UTF8
+}
+
+function Get-InstallState {
+    $hasScript = Test-Path $InstalledScript
+    $hasTask   = ($null -ne (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) -or
+                 ($null -ne (Get-ScheduledTask -TaskName $LegacyTaskName -ErrorAction SilentlyContinue))
+    $profile   = 'Unknown'
+    $version   = $null
+    $installedAt = $null
+
+    if (Test-Path $StateFile) {
+        try {
+            $json = Get-Content -Path $StateFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($json.Profile)     { $profile     = $json.Profile }
+            if ($json.Version)     { $version     = $json.Version }
+            if ($json.InstalledAt) { $installedAt = $json.InstalledAt }
+        } catch {}
+    }
+
+    [PSCustomObject]@{
+        IsInstalled = ($hasScript -or $hasTask -or (Test-Path $BackupDir))
+        Profile     = $profile
+        Version     = $version
+        InstalledAt = $installedAt
+        HasTask     = $hasTask
+    }
+}
+
+function Save-InstallState([string]$ProfileName) {
+    if (-not (Test-Path $InstallDir)) { New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null }
+    $state = [ordered]@{
+        Version     = $AppVersion
+        Profile     = $ProfileName
+        InstalledAt = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+    }
+    $state | ConvertTo-Json | Set-Content -Path $StateFile -Encoding UTF8
+}
+
+function Install-ToProgramFiles {
+    if (-not (Test-Path $InstallDir)) {
+        New-Item -Path $InstallDir -ItemType Directory -Force | Out-Null
+    }
+    $sameFile = [string]::Equals(
+        [System.IO.Path]::GetFullPath($PSCommandPath),
+        [System.IO.Path]::GetFullPath($InstalledScript),
+        [StringComparison]::OrdinalIgnoreCase
+    )
+    if (-not $sameFile) {
+        Copy-Item -Path $PSCommandPath -Destination $InstalledScript -Force
+        Write-Host "  [OK] Script installed to: $InstalledScript" -ForegroundColor Green
+    }
 }
 
 # ---------- Hardware Detection ----------
@@ -150,6 +197,11 @@ function Get-HardwareProfile {
 }
 
 # ---------- Restore Point & Backup ----------
+function Set-RegValue([string]$Path, [string]$Name, $Value, [string]$Type) {
+    if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
+    Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type $Type -Force
+}
+
 function Ensure-RestorePoint {
     Write-Section "SYSTEM RESTORE POINT (FIRST INSTALL)"
     if (Test-Path $RestoreMarker) {
@@ -162,7 +214,6 @@ function Ensure-RestorePoint {
     $srKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore'
 
     try {
-        # Check if System Restore is disabled (OS-language independent)
         $rpInterval = (Get-ItemProperty -Path $srKey -Name 'RPSessionInterval' -ErrorAction SilentlyContinue).RPSessionInterval
         $hasShadow  = @(Get-CimInstance -ClassName Win32_ShadowStorage -ErrorAction SilentlyContinue).Count -gt 0
         $isDisabled = ($rpInterval -eq 0) -or ($null -eq $rpInterval) -or (-not $hasShadow)
@@ -252,15 +303,14 @@ function Backup-OriginalState {
 }
 
 function Invoke-Revert {
-    Write-Section "REVERTING CHANGES"
-    if (-not (Test-Path $BackupDir)) {
-        Write-Host "  [!] Backup directory not found: $BackupDir" -ForegroundColor Yellow
-        return
-    }
-
-    Get-ChildItem -Path $BackupDir -Filter '*.reg' | ForEach-Object {
-        & reg.exe import $_.FullName 2>&1 | Out-Null
-        Write-Host "  [OK] Imported $($_.Name)" -ForegroundColor Green
+    Write-Section "REVERTING SYSTEM CHANGES"
+    if (Test-Path $BackupDir) {
+        Get-ChildItem -Path $BackupDir -Filter '*.reg' | ForEach-Object {
+            & reg.exe import $_.FullName 2>&1 | Out-Null
+            Write-Host "  [OK] Imported $($_.Name)" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "  [!] Backup directory not found ($BackupDir). Applying default resets." -ForegroundColor Yellow
     }
 
     & reg.exe delete "HKLM\SYSTEM\CurrentControlSet\Control" /v WaitToKillServiceTimeout /f 2>&1 | Out-Null
@@ -273,27 +323,11 @@ function Invoke-Revert {
     & powercfg.exe /setactive SCHEME_CURRENT 2>&1 | Out-Null
 
     if (Test-Path $RestoreMarker) { Remove-Item -Path $RestoreMarker -Force -ErrorAction SilentlyContinue }
-    Write-Log "REVERT | Completed successfully."
-    Write-Host "`n  Revert completed. Restart Windows to apply all restored settings." -ForegroundColor Cyan
+    Write-Host "  [OK] System settings reverted." -ForegroundColor Green
 }
 
 # ---------- Applying Optimizations ----------
-function Set-RegValue([string]$Path, [string]$Name, $Value, [string]$Type) {
-    if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
-    Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type $Type -Force
-}
-
-function Invoke-Optimize($Hw, [bool]$EnablePriorityLoop) {
-    if (-not (Ensure-RestorePoint)) {
-        if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }
-        exit 1
-    }
-
-    Write-Host ""
-    Write-Section "INSTALLING & APPLYING OPTIMIZATIONS"
-    Install-ToProgramFiles
-    Backup-OriginalState
-
+function Apply-NativeTweaks($Hw, [switch]$Quiet) {
     # Base optimizations
     Set-RegValue 'HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl' 'Win32PrioritySeparation' 38 'DWord'
     Set-RegValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management' 'LargeSystemCache' 0 'DWord'
@@ -311,11 +345,11 @@ function Invoke-Optimize($Hw, [bool]$EnablePriorityLoop) {
 
     & sc.exe config DiagTrack start= disabled 2>&1 | Out-Null
     & sc.exe stop DiagTrack 2>&1 | Out-Null
-    Write-Host "  [OK] Base optimizations applied" -ForegroundColor Green
+    if (-not $Quiet) { Write-Host "  [OK] Base optimizations applied" -ForegroundColor Green }
 
     if ($Hw.KERN) {
         Set-RegValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management' 'DisablePagingExecutive' 1 'DWord'
-        Write-Host "  [OK] Resident kernel in RAM enabled (RAM >= 16 GB)" -ForegroundColor Green
+        if (-not $Quiet) { Write-Host "  [OK] Resident kernel in RAM enabled (RAM >= 16 GB)" -ForegroundColor Green }
     }
 
     if ($Hw.FX) {
@@ -325,39 +359,50 @@ function Invoke-Optimize($Hw, [bool]$EnablePriorityLoop) {
         Set-RegValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'TaskbarAnimations' 0 'DWord'
         Set-RegValue 'HKCU:\Control Panel\Desktop' 'FontSmoothing' '2' 'String'
         Set-RegValue 'HKCU:\Control Panel\Desktop' 'FontSmoothingType' 2 'DWord'
-        Write-Host "  [OK] Minimal visual effects with ClearType preserved (RAM <= 4 GB)" -ForegroundColor Green
+        if (-not $Quiet) { Write-Host "  [OK] Minimal visual effects with ClearType preserved (RAM <= 4 GB)" -ForegroundColor Green }
     }
 
     if ($Hw.SSDOpt) {
         & sc.exe config SysMain start= disabled 2>&1 | Out-Null
         & sc.exe stop SysMain 2>&1 | Out-Null
         Set-RegValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize' 'StartupDelayInMSec' 0 'DWord'
-        Write-Host "  [OK] SysMain disabled and zero startup delay applied (SSD)" -ForegroundColor Green
+        if (-not $Quiet) { Write-Host "  [OK] SysMain disabled and zero startup delay applied (SSD)" -ForegroundColor Green }
     }
 
     if ($Hw.IDX) {
         & sc.exe config WSearch start= demand 2>&1 | Out-Null
         & sc.exe stop WSearch 2>&1 | Out-Null
-        Write-Host "  [OK] Windows Search set to on-demand (RAM <= 4 GB)" -ForegroundColor Green
+        if (-not $Quiet) { Write-Host "  [OK] Windows Search set to on-demand (RAM <= 4 GB)" -ForegroundColor Green }
     }
 
     if ($Hw.TurboDC) {
         & powercfg.exe /setactive SCHEME_BALANCED 2>&1 | Out-Null
         & powercfg.exe /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 99 2>&1 | Out-Null
         & powercfg.exe /setactive SCHEME_CURRENT 2>&1 | Out-Null
-        Write-Host "  [OK] CPU Turbo Boost disabled on battery (Laptop)" -ForegroundColor Green
+        if (-not $Quiet) { Write-Host "  [OK] CPU Turbo Boost disabled on battery (Laptop)" -ForegroundColor Green }
     }
-
-    if ($EnablePriorityLoop) {
-        Install-PriorityTask
-    } else {
-        Write-Host "  [OK] Native-only profile selected (no background task installed)." -ForegroundColor Green
-    }
-
-    Write-Log "APPLY | PROFILE=$(if ($EnablePriorityLoop) {'Standard+Loop'} else {'NativeOnly'}) | RAM=$($Hw.RAM)GB DISK=$($Hw.Disk) PORT=$($Hw.IsPortable) BUILD=$($Hw.Build) | FX=$($Hw.FX) KERN=$($Hw.KERN) SSD=$($Hw.SSDOpt) IDX=$($Hw.IDX) TURBO=$($Hw.TurboDC)"
 }
 
-# ---------- Scheduled Task & Foreground Priority Loop ----------
+function Invoke-Optimize($Hw, [bool]$EnablePriorityLoop) {
+    if (-not (Ensure-RestorePoint)) {
+        if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }
+        exit 1
+    }
+
+    Write-Host ""
+    Write-Section "INSTALLING & APPLYING OPTIMIZATIONS"
+    Install-ToProgramFiles
+    Backup-OriginalState
+    Apply-NativeTweaks -Hw $Hw
+
+    $profileName = if ($EnablePriorityLoop) { 'Standard+Loop' } else { 'NativeOnBoot' }
+    Register-OptimizerTask -IncludePriorityLoop $EnablePriorityLoop
+    Save-InstallState -ProfileName $profileName
+
+    Write-Log "APPLY | PROFILE=$profileName | RAM=$($Hw.RAM)GB DISK=$($Hw.Disk) PORT=$($Hw.IsPortable) BUILD=$($Hw.Build) | FX=$($Hw.FX) KERN=$($Hw.KERN) SSD=$($Hw.SSDOpt) IDX=$($Hw.IDX) TURBO=$($Hw.TurboDC)"
+}
+
+# ---------- Scheduled Task, Uninstall & Priority Loop ----------
 function Ensure-ExclusionsFile {
     if (-not (Test-Path $ExclusionsFile)) {
         @(
@@ -387,24 +432,65 @@ function Get-ExcludedProcesses {
     return ($defaults + $custom) | Select-Object -Unique
 }
 
-function Install-PriorityTask {
-    Install-ToProgramFiles
-    Ensure-ExclusionsFile
+function Remove-OptimizerTasks {
+    foreach ($name in @($TaskName, $LegacyTaskName)) {
+        $existing = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+        if ($existing) {
+            Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue
+            Write-Host "  [OK] Scheduled task '$name' removed." -ForegroundColor Green
+        }
+    }
+}
 
-    $action    = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -PriorityLoop"
+function Register-OptimizerTask([bool]$IncludePriorityLoop) {
+    Install-ToProgramFiles
+    Remove-OptimizerTasks
+
+    if ($IncludePriorityLoop) {
+        Ensure-ExclusionsFile
+        $taskArgs  = "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -BootApply -PriorityLoop"
+        $timeLimit = [TimeSpan]::Zero
+        $modeDesc  = "headless logon re-apply + foreground priority loop"
+    } else {
+        $taskArgs  = "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstalledScript`" -BootApply"
+        $timeLimit = New-TimeSpan -Minutes 5
+        $modeDesc  = "headless one-shot logon re-apply (exits immediately, zero background loop)"
+    }
+
+    $action    = New-ScheduledTaskAction -Execute 'conhost.exe' -Argument $taskArgs
     $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
     $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
     $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-                    -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+                    -ExecutionTimeLimit $timeLimit -MultipleInstances IgnoreNew
 
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
-    Write-Host "  [OK] Scheduled task '$TaskName' installed (running from $InstalledScript)." -ForegroundColor Green
-    Write-Host "  [OK] Exclusions file: $ExclusionsFile" -ForegroundColor Gray
+    Write-Host "  [OK] Scheduled task '$TaskName' registered ($modeDesc)." -ForegroundColor Green
+    if ($IncludePriorityLoop) {
+        Write-Host "  [OK] Exclusions file: $ExclusionsFile" -ForegroundColor Gray
+    }
 }
 
-function Uninstall-PriorityTask {
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false 2>&1 | Out-Null
-    Write-Host "  [OK] Scheduled task '$TaskName' removed." -ForegroundColor Green
+function Invoke-Uninstall {
+    Write-Section "UNINSTALLING OPYDIGITAL LAPTOP OPTIMIZER"
+    Remove-OptimizerTasks
+    Invoke-Revert
+
+    if (Test-Path $InstallDir) {
+        $runningFromInstallDir = [System.IO.Path]::GetFullPath($PSCommandPath).StartsWith(
+            [System.IO.Path]::GetFullPath($InstallDir),
+            [StringComparison]::OrdinalIgnoreCase
+        )
+        if ($runningFromInstallDir) {
+            Start-Process -FilePath 'cmd.exe' -ArgumentList "/c timeout /t 2 /nobreak >nul & rd /s /q `"$InstallDir`"" -WindowStyle Hidden
+            Write-Host "  [OK] Scheduled removal of $InstallDir on exit." -ForegroundColor Green
+        } else {
+            Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "  [OK] Removed installation directory: $InstallDir" -ForegroundColor Green
+        }
+    }
+
+    Write-Host "`n  Uninstall completed. Restart Windows to finish restoring all settings." -ForegroundColor Cyan
 }
 
 function Start-PriorityLoop {
@@ -477,29 +563,49 @@ public class Win32Focus {
     }
 }
 
-# ---------- Main Entry Point ----------
-if ($PriorityLoop) {
-    Start-PriorityLoop
+# ---------- Headless Boot / Logon Entry Point ----------
+if ($BootApply -or $PriorityLoop) {
+    if ($BootApply) {
+        $hwBoot = Get-HardwareProfile
+        Apply-NativeTweaks -Hw $hwBoot -Quiet
+        Write-Log "BOOT_APPLY | RAM=$($hwBoot.RAM)GB DISK=$($hwBoot.Disk) PORT=$($hwBoot.IsPortable)"
+    }
+    if ($PriorityLoop) {
+        Start-PriorityLoop
+    }
     exit 0
 }
 
+# ---------- Interactive / CLI Entry Point ----------
 Write-Banner
 
 if (-not $DryRun -and -not (Test-IsAdmin)) {
     Request-Elevation
 }
 
-if ($Revert)        { Invoke-Revert;        if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
-if ($InstallTask)   { Install-PriorityTask; if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
-if ($UninstallTask) { Uninstall-PriorityTask; if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
+if ($Uninstall)     { Invoke-Uninstall;     if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
+if ($Revert)        { Invoke-Revert;        Write-Log "REVERT | Completed."; if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
+if ($UninstallTask) { Remove-OptimizerTasks; if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
+if ($InstallTask -and -not $Silent) {
+    Register-OptimizerTask -IncludePriorityLoop $true
+    if ($Elevated) { Read-Host "`nPress Enter to exit" }
+    exit 0
+}
 
-$hw = Get-HardwareProfile
+$hw    = Get-HardwareProfile
+$state = Get-InstallState
 
 Write-Section "DETECTED HARDWARE"
 Write-Host ("  Usable RAM .......: {0} GB" -f $hw.RAM) -ForegroundColor White
 Write-Host ("  System Disk ......: {0}" -f $hw.Disk) -ForegroundColor White
 Write-Host ("  Laptop/Portable ..: {0}" -f $(if ($hw.IsPortable) { 'Yes' } else { 'No' })) -ForegroundColor White
 Write-Host ("  Windows Build ....: {0}" -f $hw.Build) -ForegroundColor White
+if ($state.IsInstalled) {
+    $verStr = if ($state.Version) { "v$($state.Version)" } else { "installed" }
+    Write-Host ("  Install Status ...: Installed ({0} | Profile: {1})" -f $verStr, $state.Profile) -ForegroundColor Green
+} else {
+    Write-Host "  Install Status ...: Not installed" -ForegroundColor DarkGray
+}
 Write-Host ""
 
 Write-Section "OPTIMIZATION PLAN"
@@ -516,28 +622,47 @@ if ($DryRun) {
     exit 0
 }
 
-$enableLoop = $false
+$enableLoop = [bool]$InstallTask
 if (-not $Silent) {
-    Write-Section "SELECT OPTIMIZATION PROFILE"
+    Write-Section "SELECT ACTION / PROFILE"
     Write-Host "  [1] " -ForegroundColor Cyan -NoNewline
     Write-Host "Standard + Background Priority Loop" -ForegroundColor White
-    Write-Host "      Applies all system optimizations + headless logon foreground booster" -ForegroundColor Gray
-    Write-Host "      (auto-pauses during D3D fullscreen games and active anti-cheats)." -ForegroundColor Gray
+    Write-Host "      Re-applies native optimizations at logon + runs headless foreground" -ForegroundColor Gray
+    Write-Host "      priority booster (auto-pauses during D3D fullscreen & anti-cheats)." -ForegroundColor Gray
     Write-Host ""
     Write-Host "  [2] " -ForegroundColor Green -NoNewline
-    Write-Host "Native System Only (Recommended for Competitive Gamers)" -ForegroundColor White
-    Write-Host "      Applies only native Windows optimizations with ZERO background tasks." -ForegroundColor Gray
-    Write-Host "      Recommended if you play competitive games with kernel anti-cheats" -ForegroundColor Yellow
-    Write-Host "      (Riot Vanguard, EasyAntiCheat, BattlEye, FACEIT, Ricochet)." -ForegroundColor Yellow
+    Write-Host "Native On-Boot Only (Recommended for Competitive Gamers)" -ForegroundColor White
+    Write-Host "      Re-applies native Windows optimizations once at logon via Task" -ForegroundColor Gray
+    Write-Host "      Scheduler (no UAC) and exits immediately — ZERO background loop." -ForegroundColor Gray
+    Write-Host "      Recommended for games with kernel anti-cheats (Riot Vanguard," -ForegroundColor Yellow
+    Write-Host "      EasyAntiCheat, BattlEye, FACEIT, Ricochet)." -ForegroundColor Yellow
     Write-Host ""
+    if ($state.IsInstalled) {
+        Write-Host "  [3] " -ForegroundColor Red -NoNewline
+        Write-Host "Uninstall & Revert All Changes" -ForegroundColor White
+        Write-Host "      Removes the scheduled task, restores original settings, and deletes" -ForegroundColor Gray
+        Write-Host "      $InstallDir." -ForegroundColor Gray
+        Write-Host ""
+    }
     Write-Host "  [0] " -ForegroundColor DarkGray -NoNewline
     Write-Host "Cancel" -ForegroundColor Gray
     Write-Host ""
 
-    $choice = Read-Host "Choose an option [1 / 2 / 0]"
+    $prompt = if ($state.IsInstalled) { "Choose an option [1 / 2 / 3 / 0]" } else { "Choose an option [1 / 2 / 0]" }
+    $choice = Read-Host $prompt
     switch ($choice) {
         '1' { $enableLoop = $true }
         '2' { $enableLoop = $false }
+        '3' {
+            if ($state.IsInstalled) {
+                Invoke-Uninstall
+                if ($Elevated) { Read-Host "`nPress Enter to exit" }
+                exit 0
+            }
+            Write-Host "  Cancelled. No changes were made." -ForegroundColor Yellow
+            if ($Elevated) { Read-Host "`nPress Enter to exit" }
+            exit 0
+        }
         default {
             Write-Host "  Cancelled. No changes were made." -ForegroundColor Yellow
             if ($Elevated) { Read-Host "`nPress Enter to exit" }

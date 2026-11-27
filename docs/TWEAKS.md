@@ -62,23 +62,22 @@ Before any tweak is applied on the first run:
 
 ---
 
-## 4. Program Files Installation & Optional Headless Logon Priority Loop
+## 4. Program Files Installation & Headless Logon Task (`Opydigital_LaptopOptimizer`)
 
-- On first install (or when running `-InstallTask`), `LaptopOptimizer.ps1` copies itself to `%ProgramFiles%\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1`.
-- Backups (`backup_tweaks/`), logs (`tweaks_log.txt`), and exclusions (`priority_exclusions.txt`) are stored in `%ProgramFiles%\Opydigital\LaptopOptimizer\`.
-- The logon priority loop is **opt-in** (prompted during interactive setup or enabled via `-InstallTask`).
-- Registers task `Opydigital_PriorityLoop` triggered `AtLogOn` for the current user (`LogonType Interactive`, `RunLevel Highest`, unlimited execution time, `MultipleInstances IgnoreNew`).
-- Launches via `conhost.exe --headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ProgramFiles%\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1" -PriorityLoop` so no console window or taskbar button appears.
-- **Anti-Cheat & Fullscreen Game Auto-Pause**: Before modifying any process priority, checks `SHQueryUserNotificationState` (`QUNS_BUSY` / `QUNS_RUNNING_D3D_FULL_SCREEN`) and active anti-cheat services (`vgc`, `EasyAntiCheat`, `EasyAntiCheat_EOS`, `BEService`, `BEDaisy`, `FACEIT`, `EAAntiCheat`, `xhunter1`, `HoYoKProtect`). If detected, restores any boosted process to `Normal` and pauses without opening game process handles.
-- Otherwise polls `GetForegroundWindow()` every 2 seconds, elevates the active non-excluded process from `Normal` to `AboveNormal`, and restores the previously boosted process back to `Normal`.
+- On first install, `LaptopOptimizer.ps1` copies itself to `%ProgramFiles%\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1`.
+- Backups (`backup_tweaks/`), installation metadata (`install_state.json`), logs (`tweaks_log.txt`), and exclusions (`priority_exclusions.txt`) are stored in `%ProgramFiles%\Opydigital\LaptopOptimizer\`.
+- A single Scheduled Task named `Opydigital_LaptopOptimizer` is registered (`AtLogOn` for the current user, `LogonType Interactive`, `RunLevel Highest`, `conhost.exe --headless`, `MultipleInstances IgnoreNew`), avoiding any UAC prompt or taskbar window at logon:
+  - **Profile `[2]` — Native On-Boot Only (Competitive Gamers)**: runs `-BootApply` once at logon to re-verify/re-apply native registry, service, NTFS, and battery power tweaks (in case Windows Updates or OEM utilities reset them), then exits immediately (`exit 0`). No background PowerShell process remains running.
+  - **Profile `[1]` — Standard + Background Priority Loop**: runs `-BootApply -PriorityLoop`. After re-applying native tweaks, it polls `GetForegroundWindow()` every 2 seconds and boosts the active non-excluded process to `AboveNormal`, while **automatically pausing** whenever `SHQueryUserNotificationState` reports a fullscreen Direct3D app (`QUNS_BUSY` / `QUNS_RUNNING_D3D_FULL_SCREEN`) or an active kernel anti-cheat (`vgc`, `EasyAntiCheat`, `EasyAntiCheat_EOS`, `BEService`, `BEDaisy`, `FACEIT`, `EAAntiCheat`, `xhunter1`, `HoYoKProtect`) is detected.
+- Switching between Profile `[1]` and `[2]` cleanly replaces the existing task.
 
 ---
 
-## 5. Rollback (`-Revert`)
+## 5. Rollback (`-Revert`) & Full Uninstall (`-Uninstall`)
 
-Running `.\LaptopOptimizer.ps1 -Revert`:
-1. Re-imports every `.reg` backup saved in `backup_tweaks/` (including service configurations for `DiagTrack`, `SysMain`, and `WSearch`).
-2. Removes added override values (`WaitToKillServiceTimeout`, `StartupDelayInMSec`, `LetAppsRunInBackground`, `DODownloadMode`).
-3. Restores NTFS `disablelastaccess` to `2` (System Managed).
-4. Restores battery `PROCTHROTTLEMAX` to `100`.
-5. Removes `backup_tweaks/restore_point.ok` so a future installation creates a fresh restore point.
+Running `.\RUNME.bat -Uninstall` (or choosing `[3]` in the menu when already installed):
+1. Stops and unregisters `Opydigital_LaptopOptimizer`.
+2. Re-imports every `.reg` backup saved in `backup_tweaks/` (including service configurations for `DiagTrack`, `SysMain`, and `WSearch`).
+3. Removes added override values (`WaitToKillServiceTimeout`, `StartupDelayInMSec`, `LetAppsRunInBackground`, `DODownloadMode`).
+4. Restores NTFS `disablelastaccess` to `2` (System Managed) and battery `PROCTHROTTLEMAX` to `100`.
+5. Deletes `%ProgramFiles%\Opydigital\LaptopOptimizer\` cleanly.
