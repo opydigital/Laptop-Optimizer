@@ -327,6 +327,10 @@ function Backup-OriginalState {
         'Svc_WSearch.reg'       = 'HKLM\SYSTEM\CurrentControlSet\Services\WSearch'
         'Svc_WerSvc.reg'        = 'HKLM\SYSTEM\CurrentControlSet\Services\WerSvc'
         'Svc_lfsvc.reg'         = 'HKLM\SYSTEM\CurrentControlSet\Services\lfsvc'
+        'Svc_MapsBroker.reg'    = 'HKLM\SYSTEM\CurrentControlSet\Services\MapsBroker'
+        'Svc_RetailDemo.reg'    = 'HKLM\SYSTEM\CurrentControlSet\Services\RetailDemo'
+        'Svc_Fax.reg'           = 'HKLM\SYSTEM\CurrentControlSet\Services\Fax'
+        'Svc_WalletService.reg' = 'HKLM\SYSTEM\CurrentControlSet\Services\WalletService'
     }
 
     foreach ($file in $exports.Keys) {
@@ -366,6 +370,10 @@ function Invoke-Revert {
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\EdgeUpdate" /v CreateDesktopShortcutDefault /f 2>&1 | Out-Null
     & reg.exe delete "HKCU\Software\Policies\Microsoft\Windows\Explorer" /v DisableSearchBoxSuggestions /f 2>&1 | Out-Null
     & reg.exe delete "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v SettingsPageVisibility /f 2>&1 | Out-Null
+    & reg.exe delete "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager" /v DisableWpbtExecution /f 2>&1 | Out-Null
+    & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\Device Metadata" /v PreventDeviceMetadataFromNetwork /f 2>&1 | Out-Null
+    & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Power\PowerSettings\f15576e8-98b7-4186-b944-eafa664402d9" /v DCSettingIndex /f 2>&1 | Out-Null
+    & reg.exe delete "HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell" /v FolderType /f 2>&1 | Out-Null
 
     & fsutil.exe behavior set disablelastaccess 2 2>&1 | Out-Null
     & powercfg.exe /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100 2>&1 | Out-Null
@@ -396,7 +404,25 @@ function Apply-NativeTweaks($Hw, [switch]$Quiet) {
 
     & sc.exe config DiagTrack start= disabled 2>&1 | Out-Null
     & sc.exe stop DiagTrack 2>&1 | Out-Null
-    if (-not $Quiet) { Write-Host "  [OK] Base optimizations applied" -ForegroundColor Green }
+
+    # WinUtil laptop-safe base tweaks: WPBT, Device Metadata, Explorer Auto-Discovery, safe idle services
+    Set-RegValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' 'DisableWpbtExecution' 1 'DWord'
+    Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Device Metadata' 'PreventDeviceMetadataFromNetwork' 1 'DWord'
+    Set-RegValue 'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell' 'FolderType' 'NotSpecified' 'String'
+
+    foreach ($svc in @('MapsBroker','RetailDemo','Fax','WalletService')) {
+        if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
+            & sc.exe config $svc start= demand 2>&1 | Out-Null
+            & sc.exe stop $svc 2>&1 | Out-Null
+        }
+    }
+
+    if (-not $Quiet) {
+        # Safe temporary files cleanup on interactive/manual apply
+        Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path "$env:SystemRoot\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "  [OK] Base optimizations applied (incl. WPBT, Device Metadata, Explorer, temp cleanup)" -ForegroundColor Green
+    }
 
     if ($Hw.KERN) {
         Set-RegValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management' 'DisablePagingExecutive' 1 'DWord'
@@ -430,7 +456,10 @@ function Apply-NativeTweaks($Hw, [switch]$Quiet) {
         & powercfg.exe /setactive SCHEME_BALANCED 2>&1 | Out-Null
         & powercfg.exe /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 99 2>&1 | Out-Null
         & powercfg.exe /setactive SCHEME_CURRENT 2>&1 | Out-Null
-        if (-not $Quiet) { Write-Host "  [OK] CPU Turbo Boost disabled on battery (Laptop)" -ForegroundColor Green }
+        # Fix S0 Modern Standby battery drain (disable network connectivity on battery sleep) + tray battery %
+        Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings\f15576e8-98b7-4186-b944-eafa664402d9' 'DCSettingIndex' 0 'DWord'
+        Set-RegValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'IsBatteryPercentageEnabled' 1 'DWord'
+        if (-not $Quiet) { Write-Host "  [OK] Laptop battery tweaks applied (Turbo DC limit, S0 Standby fix, battery %)" -ForegroundColor Green }
     }
 }
 
@@ -900,7 +929,7 @@ Write-PlanRow "Minimal visual effects (+ClearType)"    $hw.FX      "[RAM <= 4 GB
 Write-PlanRow "Resident kernel in RAM"                 $hw.KERN    "[RAM >= 16 GB]"
 Write-PlanRow "SSD optimizations (SysMain / Boot)"     $hw.SSDOpt  "[SSD / NVMe]"
 Write-PlanRow "On-demand Search indexing"              $hw.IDX     "[RAM <= 4 GB]"
-Write-PlanRow "Disable Turbo Boost on battery"         $hw.TurboDC "[Laptop]"
+Write-PlanRow "Laptop battery (Turbo DC, S0 fix, %)"  $hw.TurboDC "[Laptop]"
 Write-PlanRow "Gaming Suite (HAGS, DVR, MMCSS, AC)"    ([bool]$Gaming) "[Menu Option 2 / -Gaming]"
 Write-Host ""
 

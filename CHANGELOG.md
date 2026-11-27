@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - **Interactive Windows 11 Debloat Wizard** as main menu option **`[3]`** (and `-Debloat` CLI flag), based on [ChrisTitusTech/winutil](https://github.com/ChrisTitusTech/winutil). Prompts `[Y/N]` step-by-step across 10 curated categories: Telemetry & Diagnostics, Activity History, Location Tracking, Consumer Features, Copilot & Windows AI, Bing Search & Start Recommendations, Widgets, Microsoft Edge Debloat, Pre-Installed AppX Bloatware, and Quality-of-Life UI tweaks.
+- **Laptop-specific WinUtil optimizations** added to Standard & Gaming profiles (with full backup and rollback):
+  - S0 Modern Standby network drain fix on battery (`DCSettingIndex = 0`).
+  - System tray numeric battery percentage (`IsBatteryPercentageEnabled = 1`).
+  - BIOS bloatware injection block (`DisableWpbtExecution = 1`) and peripheral companion app block (`PreventDeviceMetadataFromNetwork = 1`).
+  - File Explorer automatic folder-type discovery disabled (`FolderType = NotSpecified`).
+  - Safe idle services (`MapsBroker`, `RetailDemo`, `Fax`, `WalletService`) set to manual and safe `%TEMP%` cleanup on apply.
 - Shifted **Uninstall & Revert All Changes** to menu option **`[4]`** and expanded `-Revert` / `-Uninstall` to restore debloat policy keys and services (`WerSvc`, `lfsvc`).
 
 ## [1.0.1] - 2026-11-27

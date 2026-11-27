@@ -35,12 +35,12 @@ A lightweight, hardware-aware PowerShell utility to optimize **Windows 11 laptop
 
 | Optimization | Condition | What It Does |
 | :--- | :--- | :--- |
-| **Base Tweaks** | Always | Tunes `Win32PrioritySeparation`, shutdown/hang timeouts, NTFS `disablelastaccess`, disables P2P Delivery Optimization (`DODownloadMode = 0`), disables silent app installs/suggestions, and disables `DiagTrack`. |
+| **Base Tweaks** | Always | Tunes `Win32PrioritySeparation`, shutdown/hang timeouts, NTFS `disablelastaccess`, disables P2P Delivery Optimization (`DODownloadMode = 0`), disables WPBT BIOS bloatware injection & device companion auto-installs, disables Explorer auto-folder discovery, sets safe idle services (`MapsBroker`, `RetailDemo`, `Fax`, `WalletService`) to manual, cleans `%TEMP%`, and disables `DiagTrack`. |
 | **Minimal Visual Effects (+ClearType)** | `RAM <= 4 GB` | Disables heavy window/taskbar animations while preserving ClearType font smoothing (`FontSmoothing = 2`). |
 | **On-Demand Search Indexing** | `RAM <= 4 GB` | Sets `WSearch` to `demand` (manual) so search still works when needed without constant background indexing. |
 | **Resident Kernel in RAM** | `RAM >= 16 GB` | Sets `DisablePagingExecutive = 1` to keep kernel-mode drivers in physical memory. |
 | **SSD / NVMe Optimizations** | `Disk == SSD/NVMe` | Disables `SysMain` (Superfetch) and sets `StartupDelayInMSec = 0` for faster post-login app startup. |
-| **Battery Turbo Boost Limit** | `Laptop / Portable` | Activates Balanced plan and sets `PROCTHROTTLEMAX = 99` on battery (DC) to cut heat, fan noise, and power draw while keeping full Turbo Boost on AC power. |
+| **Laptop Battery & Standby** | `Laptop / Portable` | Activates Balanced plan, limits CPU Turbo Boost on battery (`PROCTHROTTLEMAX = 99`), disables S0 Modern Standby network drain on battery (`DCSettingIndex = 0`), and enables numeric tray battery percentage. |
 
 For a complete technical breakdown of every registry key, service, and command, see [docs/TWEAKS.md](docs/TWEAKS.md).
 
