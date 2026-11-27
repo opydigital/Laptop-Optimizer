@@ -94,7 +94,8 @@ function Request-Elevation {
 
 function Set-WindowMaximized {
     try {
-        Add-Type -TypeDefinition @"
+        if (-not ('Win32Console' -as [type])) {
+            Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 public class Win32Console {
@@ -102,6 +103,7 @@ public class Win32Console {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 }
 "@ -ErrorAction SilentlyContinue
+        }
         $hwnd = [Win32Console]::GetConsoleWindow()
         if ($hwnd -ne [IntPtr]::Zero) {
             [void][Win32Console]::ShowWindow($hwnd, 3) # SW_MAXIMIZE
@@ -384,7 +386,15 @@ function Invoke-Revert {
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Edge" /f 2>&1 | Out-Null
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\EdgeUpdate" /v CreateDesktopShortcutDefault /f 2>&1 | Out-Null
     & reg.exe delete "HKCU\Software\Policies\Microsoft\Windows\Explorer" /v DisableSearchBoxSuggestions /f 2>&1 | Out-Null
+    & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\Explorer" /v HideRecommendedSection /f 2>&1 | Out-Null
+    & reg.exe delete "HKLM\SOFTWARE\Microsoft\PolicyManager\current\device\Start" /v HideRecommendedSection /f 2>&1 | Out-Null
     & reg.exe delete "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v SettingsPageVisibility /f 2>&1 | Out-Null
+    & reg.exe delete "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection" /v AllowTelemetry /f 2>&1 | Out-Null
+    & reg.exe delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" /v BingSearchEnabled /f 2>&1 | Out-Null
+    & reg.exe delete "HKCU\Software\Classes\CLSID\{f874310e-b6b7-47dc-bc84-b9e6b38f5903}" /f 2>&1 | Out-Null
+    & reg.exe delete "HKCU\Software\Classes\CLSID\{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}" /f 2>&1 | Out-Null
+    Set-RegValue 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location' 'Value' 'Allow' 'String'
+    Set-RegValue 'HKLM:\SYSTEM\Maps' 'AutoUpdateEnabled' 1 'DWord'
     & reg.exe delete "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager" /v DisableWpbtExecution /f 2>&1 | Out-Null
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\Device Metadata" /v PreventDeviceMetadataFromNetwork /f 2>&1 | Out-Null
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Power\PowerSettings\f15576e8-98b7-4186-b944-eafa664402d9" /v DCSettingIndex /f 2>&1 | Out-Null
@@ -485,10 +495,7 @@ function Apply-NativeTweaks($Hw, [switch]$Quiet) {
     }
 
     if (-not $Quiet) {
-        # Safe temporary files cleanup on interactive/manual apply
-        Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
-        Remove-Item -Path "$env:SystemRoot\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Host "  [OK] Base optimizations applied (svchost grouping, idle services, tasks, Edge/Copilot bg, temp cleanup)" -ForegroundColor Green
+        Write-Host "  [OK] Base optimizations applied (svchost grouping, idle services, tasks, Edge/Copilot bg)" -ForegroundColor Green
     }
 
     if ($Hw.KERN) {
@@ -535,7 +542,8 @@ function Invoke-RamCleanup([switch]$Quiet) {
     $beforeMB = [math]::Round(((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024), 0)
 
     try {
-        Add-Type -TypeDefinition @"
+        if (-not ('OpyRamCleaner' -as [type])) {
+            Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 public class OpyRamCleaner {
@@ -571,6 +579,7 @@ public class OpyRamCleaner {
     }
 }
 "@ -ErrorAction SilentlyContinue
+        }
         $status = [OpyRamCleaner]::PurgeStandbyList()
     } catch {
         $status = -1
@@ -707,8 +716,8 @@ function Invoke-DebloatWizard([switch]$Auto) {
         Write-Host ""
         Write-Host "  [2] " -ForegroundColor Yellow -NoNewline
         Write-Host "Custom Debloat (Step-by-Step [Y/N])" -ForegroundColor White
-        Write-Host "      Prompts individually for each of the 10 categories so you choose" -ForegroundColor Gray
-        Write-Host "      exactly what to disable or keep." -ForegroundColor Gray
+        Write-Host "      Prompts individually for each of the 11 categories so you choose" -ForegroundColor Gray
+        Write-Host "      exactly what to disable or keep (incl. Copilot & Mouse Accel)." -ForegroundColor Gray
         Write-Host ""
         Write-Host "  [0] " -ForegroundColor DarkGray -NoNewline
         Write-Host "Back to Main Menu" -ForegroundColor Gray
@@ -733,9 +742,10 @@ function Invoke-DebloatWizard([switch]$Auto) {
     Write-Section $(if ($autoMode) { "AUTOMATIC DEBLOAT" } else { "CUSTOM DEBLOAT SELECTION" })
 
     $applied = @()
+    $totalSteps = if ($autoMode) { 10 } else { 11 }
 
     # 1. Telemetry & Diagnostics
-    Write-Host "`n  [1/10] Telemetry & Diagnostics" -ForegroundColor Cyan
+    Write-Host "`n  [1/$totalSteps] Telemetry & Diagnostics" -ForegroundColor Cyan
     Write-Host "         Disables Windows telemetry, Advertising ID, Tailored Experiences, DiagTrack & WerSvc." -ForegroundColor Gray
     if ($autoMode -or (Read-YesNo "Disable Telemetry & Diagnostics?")) {
         Set-RegValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo' 'Enabled' 0 'DWord'
@@ -758,7 +768,7 @@ function Invoke-DebloatWizard([switch]$Auto) {
     }
 
     # 2. Activity History
-    Write-Host "`n  [2/10] Activity History" -ForegroundColor Cyan
+    Write-Host "`n  [2/$totalSteps] Activity History" -ForegroundColor Cyan
     Write-Host "         Stops Windows from collecting and syncing your Activity Feed." -ForegroundColor Gray
     if ($autoMode -or (Read-YesNo "Disable Activity History?")) {
         Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' 'EnableActivityFeed' 0 'DWord'
@@ -769,7 +779,7 @@ function Invoke-DebloatWizard([switch]$Auto) {
     }
 
     # 3. Location Tracking
-    Write-Host "`n  [3/10] Location Tracking" -ForegroundColor Cyan
+    Write-Host "`n  [3/$totalSteps] Location Tracking" -ForegroundColor Cyan
     Write-Host "         Disables Windows Location service (lfsvc), sensor tracking, and auto map updates." -ForegroundColor Gray
     if ($autoMode -or (Read-YesNo "Disable Location Tracking?")) {
         Set-RegValue 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location' 'Value' 'Deny' 'String'
@@ -782,7 +792,7 @@ function Invoke-DebloatWizard([switch]$Auto) {
     }
 
     # 4. Windows Consumer Features
-    Write-Host "`n  [4/10] Windows Consumer Features" -ForegroundColor Cyan
+    Write-Host "`n  [4/$totalSteps] Windows Consumer Features" -ForegroundColor Cyan
     Write-Host "         Prevents Windows from auto-installing promoted Store apps and consumer suggestions." -ForegroundColor Gray
     if ($autoMode -or (Read-YesNo "Disable Consumer Features?")) {
         Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' 'DisableWindowsConsumerFeatures' 1 'DWord'
@@ -791,8 +801,8 @@ function Invoke-DebloatWizard([switch]$Auto) {
     }
 
     # 5. Windows Copilot & AI Features (Recall / Notepad AI)
-    Write-Host "`n  [5/10] Windows Copilot & AI Features" -ForegroundColor Cyan
-    Write-Host "         Disables Windows Copilot, Recall AI analysis, Notepad AI, and hides AI Components in Settings." -ForegroundColor Gray
+    Write-Host "`n  [5/$totalSteps] Windows Copilot & AI Features" -ForegroundColor Cyan
+    Write-Host "         Disables Windows Copilot policy, Recall AI analysis, Notepad AI, and hides AI Components." -ForegroundColor Gray
     if ($autoMode -or (Read-YesNo "Disable Copilot & Windows AI?")) {
         Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot' 'TurnOffWindowsCopilot' 1 'DWord'
         Set-RegValue 'HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot' 'TurnOffWindowsCopilot' 1 'DWord'
@@ -804,7 +814,7 @@ function Invoke-DebloatWizard([switch]$Auto) {
     }
 
     # 6. Start Menu Bing Search & Recommendations
-    Write-Host "`n  [6/10] Start Menu Bing Web Search & Recommendations" -ForegroundColor Cyan
+    Write-Host "`n  [6/$totalSteps] Start Menu Bing Web Search & Recommendations" -ForegroundColor Cyan
     Write-Host "         Disables Bing web results in Windows Search and hides Start Menu recommendations." -ForegroundColor Gray
     if ($autoMode -or (Read-YesNo "Disable Bing Search & Start Recommendations?")) {
         Set-RegValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search' 'BingSearchEnabled' 0 'DWord'
@@ -816,17 +826,17 @@ function Invoke-DebloatWizard([switch]$Auto) {
     }
 
     # 7. Windows Widgets
-    Write-Host "`n  [7/10] Windows Widgets (News & Interests)" -ForegroundColor Cyan
+    Write-Host "`n  [7/$totalSteps] Windows Widgets (News & Interests)" -ForegroundColor Cyan
     Write-Host "         Disables the Widgets panel and removes it from the taskbar." -ForegroundColor Gray
     if ($autoMode -or (Read-YesNo "Disable Windows Widgets?")) {
-        Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' 'AllowNewsAndInterests' 0 'DWord'
+        & reg.exe add "HKLM\SOFTWARE\Policies\Microsoft\Dsh" /v AllowNewsAndInterests /t REG_DWORD /d 0 /f 2>&1 | Out-Null
         Set-RegValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'TaskbarDa' 0 'DWord'
         Write-Host "         [OK] Windows Widgets disabled." -ForegroundColor Green
         $applied += 'Widgets'
     }
 
     # 8. Microsoft Edge Debloat (keeps Edge installed)
-    Write-Host "`n  [8/10] Microsoft Edge Debloat (keeps Edge installed)" -ForegroundColor Cyan
+    Write-Host "`n  [8/$totalSteps] Microsoft Edge Debloat (keeps Edge installed)" -ForegroundColor Cyan
     Write-Host "         Disables Edge telemetry, Shopping Assistant, Rewards, Collections, and recommendations." -ForegroundColor Gray
     if ($autoMode -or (Read-YesNo "Apply Microsoft Edge Debloat policies?")) {
         $edgeKey = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
@@ -851,9 +861,9 @@ function Invoke-DebloatWizard([switch]$Auto) {
     }
 
     # 9. Remove Common Pre-Installed Bloatware Apps (AppX)
-    Write-Host "`n  [9/10] Remove Common Pre-Installed Bloatware (AppX)" -ForegroundColor Cyan
+    Write-Host "`n  [9/$totalSteps] Remove Common Pre-Installed Bloatware (AppX)" -ForegroundColor Cyan
     Write-Host "         Removes Clipchamp, Bing News/Weather, Solitaire, People, GetHelp, Tips, FeedbackHub, QuickAssist." -ForegroundColor Gray
-    Write-Host "         (Keeps Microsoft Store, Calculator, Photos, Terminal, Xbox & Gaming Services intact.)" -ForegroundColor DarkGray
+    Write-Host "         (Keeps Microsoft Store, Copilot/M365 Copilot, Calculator, Photos, Terminal, Xbox & Gaming Services.)" -ForegroundColor DarkGray
     if ($autoMode -or (Read-YesNo "Remove pre-installed bloatware apps?")) {
         $bloatApps = @(
             'Clipchamp.Clipchamp',
@@ -864,7 +874,6 @@ function Invoke-DebloatWizard([switch]$Auto) {
             'Microsoft.People',
             'Microsoft.GetHelp',
             'Microsoft.Getstarted',
-            'Microsoft.MicrosoftOfficeHub',
             'Microsoft.WindowsFeedbackHub',
             'Microsoft.PowerAutomateDesktop',
             'MicrosoftCorporationII.QuickAssist'
@@ -885,7 +894,7 @@ function Invoke-DebloatWizard([switch]$Auto) {
     }
 
     # 10. Quality-of-Life UI Tweaks (End Task on Taskbar + Clean Explorer)
-    Write-Host "`n  [10/10] Quality-of-Life UI Tweaks (WinUtil)" -ForegroundColor Cyan
+    Write-Host "`n  [10/$totalSteps] Quality-of-Life UI Tweaks (WinUtil)" -ForegroundColor Cyan
     Write-Host "          Enables 'End Task' on taskbar right-click and opens File Explorer to This PC (hides Home/Gallery)." -ForegroundColor Gray
     if ($autoMode -or (Read-YesNo "Apply Quality-of-Life UI tweaks?")) {
         Set-RegValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings' 'TaskbarEndTask' 1 'DWord'
@@ -1018,7 +1027,8 @@ function Invoke-Uninstall {
 }
 
 function Start-PriorityLoop {
-    Add-Type @"
+    if (-not ('Win32Focus' -as [type])) {
+        Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 public class Win32Focus {
@@ -1027,6 +1037,7 @@ public class Win32Focus {
     [DllImport("shell32.dll")] public static extern int SHQueryUserNotificationState(out int pquns);
 }
 "@
+    }
     $protected = Get-ExcludedProcesses
     $antiCheatWatch = @(
         'vgc','EasyAntiCheat','EasyAntiCheat_EOS','BEService','BEDaisy',

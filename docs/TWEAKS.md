@@ -110,7 +110,7 @@ Based on [ChrisTitusTech/winutil](https://github.com/ChrisTitusTech/winutil), th
 6. **Start Menu Bing Search & Recommendations**: `BingSearchEnabled = 0`, `DisableSearchBoxSuggestions = 1`, `HideRecommendedSection = 1`.
 7. **Windows Widgets**: `Dsh\AllowNewsAndInterests = 0`, `TaskbarDa = 0`.
 8. **Microsoft Edge Debloat** *(keeps Edge installed)*: disables Edge telemetry, Shopping Assistant, Rewards, Collections, First-Run Experience, and desktop shortcut creation via official `HKLM\SOFTWARE\Policies\Microsoft\Edge` policies.
-9. **Remove Pre-Installed Bloatware (AppX)**: removes Clipchamp, Bing News/Weather/Search, Solitaire, People, GetHelp, Tips, OfficeHub, FeedbackHub, PowerAutomateDesktop, and QuickAssist (preserves Store, Calculator, Photos, Terminal, Xbox & Gaming Services).
+9. **Remove Pre-Installed Bloatware (AppX)**: removes Clipchamp, Bing News/Weather/Search, Solitaire, People, GetHelp, Tips, FeedbackHub, PowerAutomateDesktop, and QuickAssist (preserves Store, Copilot / Microsoft 365 Copilot, Calculator, Photos, Terminal, Xbox & Gaming Services).
 10. **Quality-of-Life UI Tweaks**: enables `End Task` on taskbar right-click (`TaskbarEndTask = 1`) and sets File Explorer to open to **This PC** (`LaunchTo = 1`) while unpinning Home & Gallery.
 
 ---
