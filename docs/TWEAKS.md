@@ -88,9 +88,26 @@ Before any tweak is applied on the first run:
 
 ---
 
-## 5. Rollback (`-Revert`) & Full Uninstall (`-Uninstall`)
+## 5. Interactive Windows 11 Debloat Wizard (`[3]` / `-Debloat`)
 
-Running `.\RUNME.bat -Uninstall` (or choosing `[3]` in the menu when already installed):
+Based on [ChrisTitusTech/winutil](https://github.com/ChrisTitusTech/winutil), the interactive wizard prompts `[Y/N]` individually for each item (after ensuring the mandatory first-run System Restore point and registry backups):
+
+1. **Telemetry & Diagnostics**: `AllowTelemetry = 0`, `AdvertisingInfo\Enabled = 0`, `TailoredExperiencesWithDiagnosticDataEnabled = 0`, `OnlineSpeechPrivacy\HasAccepted = 0`, `Input\TIPC\Enabled = 0`, `RestrictImplicitInkCollection/TextCollection = 1`, `Start_TrackProgs = 0`, `NumberOfSIUFInPeriod = 0`, disables `DiagTrack` and `WerSvc`.
+2. **Activity History**: `EnableActivityFeed = 0`, `PublishUserActivities = 0`, `UploadUserActivities = 0`.
+3. **Location Tracking**: `ConsentStore\location = Deny`, `SensorPermissionState = 0`, `Maps\AutoUpdateEnabled = 0`, disables `lfsvc`.
+4. **Windows Consumer Features**: `CloudContent\DisableWindowsConsumerFeatures = 1`.
+5. **Windows Copilot & AI Features**: `WindowsCopilot\TurnOffWindowsCopilot = 1`, `WindowsAI\DisableAIDataAnalysis = 1`, `WindowsNotepad\DisableAIFeatures = 1`, `SettingsPageVisibility = hide:aicomponents`.
+6. **Start Menu Bing Search & Recommendations**: `BingSearchEnabled = 0`, `DisableSearchBoxSuggestions = 1`, `HideRecommendedSection = 1`.
+7. **Windows Widgets**: `Dsh\AllowNewsAndInterests = 0`, `TaskbarDa = 0`.
+8. **Microsoft Edge Debloat** *(keeps Edge installed)*: disables Edge telemetry, Shopping Assistant, Rewards, Collections, First-Run Experience, and desktop shortcut creation via official `HKLM\SOFTWARE\Policies\Microsoft\Edge` policies.
+9. **Remove Pre-Installed Bloatware (AppX)**: removes Clipchamp, Bing News/Weather/Search, Solitaire, People, GetHelp, Tips, OfficeHub, FeedbackHub, PowerAutomateDesktop, and QuickAssist (preserves Store, Calculator, Photos, Terminal, Xbox & Gaming Services).
+10. **Quality-of-Life UI Tweaks**: enables `End Task` on taskbar right-click (`TaskbarEndTask = 1`) and sets File Explorer to open to **This PC** (`LaunchTo = 1`) while unpinning Home & Gallery.
+
+---
+
+## 6. Rollback (`-Revert`) & Full Uninstall (`-Uninstall`)
+
+Running `.\RUNME.bat -Uninstall` (or choosing `[4]` in the menu when already installed):
 1. Stops and unregisters `Opydigital_LaptopOptimizer`.
 2. Re-imports every `.reg` backup saved in `backup_tweaks/` (including service configurations for `DiagTrack`, `SysMain`, and `WSearch`).
 3. Removes added override values (`WaitToKillServiceTimeout`, `StartupDelayInMSec`, `LetAppsRunInBackground`, `DODownloadMode`).

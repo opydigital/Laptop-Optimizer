@@ -4,6 +4,12 @@ All notable changes to **Opydigital - Laptop Optimizer** will be documented in t
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.2] - 2026-11-27
+
+### Added
+- **Interactive Windows 11 Debloat Wizard** as main menu option **`[3]`** (and `-Debloat` CLI flag), based on [ChrisTitusTech/winutil](https://github.com/ChrisTitusTech/winutil). Prompts `[Y/N]` step-by-step across 10 curated categories: Telemetry & Diagnostics, Activity History, Location Tracking, Consumer Features, Copilot & Windows AI, Bing Search & Start Recommendations, Widgets, Microsoft Edge Debloat, Pre-Installed AppX Bloatware, and Quality-of-Life UI tweaks.
+- Shifted **Uninstall & Revert All Changes** to menu option **`[4]`** and expanded `-Revert` / `-Uninstall` to restore debloat policy keys and services (`WerSvc`, `lfsvc`).
+
 ## [1.0.1] - 2026-11-27
 
 ### Added
