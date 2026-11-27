@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Expanded safe idle services set to Manual (`DPS`, `PcaSvc`, `TrkWks`, `StiSvc`, `BITS`, `DusmSvc`) plus `WSearch` set to on-demand in Gaming mode.
   - Disabled noisy Windows telemetry/maintenance scheduled tasks (`Microsoft Compatibility Appraiser`, `ProgramDataUpdater`, `Autochk\Proxy`, `Consolidator`, `UsbCeip`, `DiskDiagnosticDataCollector`, `DmClient`).
   - Disabled Microsoft Edge `BackgroundModeEnabled` & `StartupBoostEnabled` and disabled **Copilot auto-startup** (keeping Copilot installed for users who want to open it manually).
+- **Debloat Submenu (`[3]`)**: Added choice between **`[1]` Automatic Debloat** (applies all 10 safe tweaks in one click) and **`[2]` Custom Debloat** (step-by-step `[Y/N]` selection), with `[0] Back to Main Menu`.
 - Main menu loop: automatically returns to the Main Menu after completing tasks, with `Exit` exclusively in the Main Menu.
 
 ## [1.0.2] - 2026-11-27
