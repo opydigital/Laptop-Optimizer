@@ -18,7 +18,9 @@ A lightweight, hardware-aware PowerShell utility to optimize **Windows 11 laptop
 - **Idempotent Backup & One-Command Rollback**: Exports original registry keys and service configurations into `backup_tweaks/` on first run only, and supports full rollback via `-Revert`.
 - **Automatic UAC Elevation**: Can be launched directly from a standard user PowerShell window — automatically prompts for Administrator privileges (UAC) when system changes are requested (`-DryRun` runs without elevation).
 - **Persistent Program Files Installation**: On first install, copies `LaptopOptimizer.ps1` into `%ProgramFiles%\Opydigital\LaptopOptimizer\` along with backups, logs, and exclusions, so the script and scheduled task keep working even if the original download is deleted.
-- **Optional Headless Logon Foreground Priority Booster (Anti-Cheat Safe)**: Opt-in Windows Scheduled Task pointing to `%ProgramFiles%\Opydigital\LaptopOptimizer\LaptopOptimizer.ps1`, running via `conhost.exe --headless` (zero taskbar window) to dynamically boost the active foreground application to `AboveNormal`. **Automatically pauses whenever a Direct3D fullscreen game (`SHQueryUserNotificationState`) or active anti-cheat (`vgc`, `EasyAntiCheat`, `BEService`, `FACEIT`, `EAAntiCheat`, etc.) is detected**, avoiding false positives.
+- **Interactive Profile Selection (Anti-Cheat Safe)**:
+  - **Profile 1 — Standard + Background Priority Loop**: Applies all optimizations plus a headless logon task (`conhost.exe --headless`) that boosts the active foreground app to `AboveNormal` and **automatically pauses during Direct3D fullscreen games or active anti-cheats** (`vgc`, `EasyAntiCheat`, `BEService`, `FACEIT`, `EAAntiCheat`, etc.).
+  - **Profile 2 — Native System Only (Recommended for Competitive Gamers)**: Applies only native Windows optimizations with **zero background tasks** — ideal for systems running kernel-level anti-cheats (Riot Vanguard, EasyAntiCheat, BattlEye, FACEIT, Ricochet).
 - **Dry-Run Mode**: Inspect detected hardware and preview the exact optimization plan without Administrator privileges (`-DryRun`).
 
 ---

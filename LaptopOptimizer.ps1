@@ -283,7 +283,7 @@ function Set-RegValue([string]$Path, [string]$Name, $Value, [string]$Type) {
     Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type $Type -Force
 }
 
-function Invoke-Optimize($Hw) {
+function Invoke-Optimize($Hw, [bool]$EnablePriorityLoop) {
     if (-not (Ensure-RestorePoint)) {
         if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }
         exit 1
@@ -348,17 +348,13 @@ function Invoke-Optimize($Hw) {
         Write-Host "  [OK] CPU Turbo Boost disabled on battery (Laptop)" -ForegroundColor Green
     }
 
-    if (-not $Silent) {
-        Write-Host ""
-        $taskResp = Read-Host "Install optional headless logon priority loop? (Auto-pauses during games/anti-cheat) [Y/N]"
-        if ($taskResp -in @('Y','y','Yes','yes')) {
-            Install-PriorityTask
-        } else {
-            Write-Host "  [--] Skipped scheduled task (you can enable it later with -InstallTask)." -ForegroundColor DarkGray
-        }
+    if ($EnablePriorityLoop) {
+        Install-PriorityTask
+    } else {
+        Write-Host "  [OK] Native-only profile selected (no background task installed)." -ForegroundColor Green
     }
 
-    Write-Log "APPLY | RAM=$($Hw.RAM)GB DISK=$($Hw.Disk) PORT=$($Hw.IsPortable) BUILD=$($Hw.Build) | FX=$($Hw.FX) KERN=$($Hw.KERN) SSD=$($Hw.SSDOpt) IDX=$($Hw.IDX) TURBO=$($Hw.TurboDC)"
+    Write-Log "APPLY | PROFILE=$(if ($EnablePriorityLoop) {'Standard+Loop'} else {'NativeOnly'}) | RAM=$($Hw.RAM)GB DISK=$($Hw.Disk) PORT=$($Hw.IsPortable) BUILD=$($Hw.Build) | FX=$($Hw.FX) KERN=$($Hw.KERN) SSD=$($Hw.SSDOpt) IDX=$($Hw.IDX) TURBO=$($Hw.TurboDC)"
 }
 
 # ---------- Scheduled Task & Foreground Priority Loop ----------
@@ -520,12 +516,37 @@ if ($DryRun) {
     exit 0
 }
 
+$enableLoop = $false
 if (-not $Silent) {
-    $resp = Read-Host "Apply this optimization plan? [Y/N]"
-    if ($resp -notin @('Y','y','Yes','yes')) { exit 0 }
+    Write-Section "SELECT OPTIMIZATION PROFILE"
+    Write-Host "  [1] " -ForegroundColor Cyan -NoNewline
+    Write-Host "Standard + Background Priority Loop" -ForegroundColor White
+    Write-Host "      Applies all system optimizations + headless logon foreground booster" -ForegroundColor Gray
+    Write-Host "      (auto-pauses during D3D fullscreen games and active anti-cheats)." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  [2] " -ForegroundColor Green -NoNewline
+    Write-Host "Native System Only (Recommended for Competitive Gamers)" -ForegroundColor White
+    Write-Host "      Applies only native Windows optimizations with ZERO background tasks." -ForegroundColor Gray
+    Write-Host "      Recommended if you play competitive games with kernel anti-cheats" -ForegroundColor Yellow
+    Write-Host "      (Riot Vanguard, EasyAntiCheat, BattlEye, FACEIT, Ricochet)." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  [0] " -ForegroundColor DarkGray -NoNewline
+    Write-Host "Cancel" -ForegroundColor Gray
+    Write-Host ""
+
+    $choice = Read-Host "Choose an option [1 / 2 / 0]"
+    switch ($choice) {
+        '1' { $enableLoop = $true }
+        '2' { $enableLoop = $false }
+        default {
+            Write-Host "  Cancelled. No changes were made." -ForegroundColor Yellow
+            if ($Elevated) { Read-Host "`nPress Enter to exit" }
+            exit 0
+        }
+    }
 }
 
-Invoke-Optimize $hw
+Invoke-Optimize $hw $enableLoop
 Write-Host "`n  Done! Restart Windows to apply all changes." -ForegroundColor Cyan
 Write-Host "  Installed path: $InstalledScript" -ForegroundColor Gray
 if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }
