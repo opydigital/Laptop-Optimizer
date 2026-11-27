@@ -35,7 +35,7 @@ A lightweight, hardware-aware PowerShell utility to optimize **Windows 11 laptop
 
 | Optimization | Condition | What It Does |
 | :--- | :--- | :--- |
-| **Base Tweaks** | Always | Tunes `Win32PrioritySeparation`, shutdown/hang timeouts, NTFS `disablelastaccess`, disables P2P Delivery Optimization (`DODownloadMode = 0`), disables WPBT BIOS bloatware injection & device companion auto-installs, disables Explorer auto-folder discovery, sets safe idle services (`MapsBroker`, `RetailDemo`, `Fax`, `WalletService`) to manual, cleans `%TEMP%`, and disables `DiagTrack`. |
+| **Base Tweaks** | Always | Tunes `Win32PrioritySeparation`, consolidates `svchost.exe` (`SvcHostSplitThresholdInKB = 64 GB`), tunes shutdown/hang timeouts & NTFS `disablelastaccess`, disables P2P Delivery Optimization, WPBT BIOS bloatware, device companion auto-installs, Explorer auto-folder discovery, Edge background/StartupBoost, Copilot auto-startup (keeps Copilot installed), telemetry scheduled tasks, sets safe idle services (`MapsBroker`, `RetailDemo`, `Fax`, `WalletService`, `DPS`, `PcaSvc`, `TrkWks`, `StiSvc`, `BITS`, `DusmSvc`) to manual, cleans `%TEMP%`, and disables `DiagTrack`. |
 | **Minimal Visual Effects (+ClearType)** | `RAM <= 4 GB` | Disables heavy window/taskbar animations while preserving ClearType font smoothing (`FontSmoothing = 2`). |
 | **On-Demand Search Indexing** | `RAM <= 4 GB` | Sets `WSearch` to `demand` (manual) so search still works when needed without constant background indexing. |
 | **Resident Kernel in RAM** | `RAM >= 16 GB` | Sets `DisablePagingExecutive = 1` to keep kernel-mode drivers in physical memory. |

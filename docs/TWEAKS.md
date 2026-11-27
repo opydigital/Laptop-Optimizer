@@ -37,7 +37,11 @@ Before any tweak is applied on the first run:
 | `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\DisableWpbtExecution` | `1` (DWORD) | Blocks OEM BIOS/UEFI bloatware injection via Windows Platform Binary Table (WPBT). |
 | `HKLM\SOFTWARE\Policies\Microsoft\Windows\Device Metadata\PreventDeviceMetadataFromNetwork` | `1` (DWORD) | Prevents auto-installing vendor companion apps when connecting peripherals. |
 | `HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell\FolderType` | `NotSpecified` (SZ) | Disables File Explorer automatic folder-type discovery for faster browsing. |
-| Services `MapsBroker`, `RetailDemo`, `Fax`, `WalletService` | `demand` (manual) | Reduces idle background services without affecting Bluetooth, printing, or Xbox. |
+| `HKLM\SYSTEM\CurrentControlSet\Control\SvcHostSplitThresholdInKB` | `0x04000000` (64 GB) | Consolidates ~60–85 split `svchost.exe` processes into ~15–20 processes to reduce RAM, handles, and context switches. |
+| `HKLM\SOFTWARE\Policies\Microsoft\Edge\BackgroundModeEnabled` & `StartupBoostEnabled` | `0` (DWORD) | Prevents Edge from staying resident in memory with background threads when closed (keeps Edge usable). |
+| `HKCU\...\AppModel\SystemAppData\Microsoft.Copilot_*\CopilotAutoStart\State` | `1` (DWORD) | Disables Copilot auto-startup at logon while keeping the Copilot app installed for on-demand use. |
+| Services `MapsBroker`, `RetailDemo`, `Fax`, `WalletService`, `DPS`, `PcaSvc`, `TrkWks`, `StiSvc`, `BITS`, `DusmSvc` | `demand` (manual) | Reduces idle background threads without breaking Bluetooth, printing, Windows Update, or Xbox. |
+| Telemetry Scheduled Tasks (`CompatTelRunner`, `Consolidator`, `UsbCeip`, `DmClient`, etc.) | Disabled | Prevents background telemetry CPU/disk spikes during gaming or work. |
 | Temporary Files (`%TEMP%`, `%SystemRoot%\Temp`) | Cleaned on apply | Safely removes unlocked temporary files to reclaim SSD space. |
 
 ---

@@ -4,6 +4,16 @@ All notable changes to **Opydigital - Laptop Optimizer** will be documented in t
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.3] - 2026-11-27
+
+### Added
+- **Process & Thread Reduction Across All Profiles** (with full backup & rollback):
+  - `svchost.exe` consolidation (`SvcHostSplitThresholdInKB = 0x04000000` / 64 GB), significantly reducing process count, threads, and handle overhead on 16 GB+ systems.
+  - Expanded safe idle services set to Manual (`DPS`, `PcaSvc`, `TrkWks`, `StiSvc`, `BITS`, `DusmSvc`) plus `WSearch` set to on-demand in Gaming mode.
+  - Disabled noisy Windows telemetry/maintenance scheduled tasks (`Microsoft Compatibility Appraiser`, `ProgramDataUpdater`, `Autochk\Proxy`, `Consolidator`, `UsbCeip`, `DiskDiagnosticDataCollector`, `DmClient`).
+  - Disabled Microsoft Edge `BackgroundModeEnabled` & `StartupBoostEnabled` and disabled **Copilot auto-startup** (keeping Copilot installed for users who want to open it manually).
+- Main menu loop: automatically returns to the Main Menu after completing tasks, with `Exit` exclusively in the Main Menu.
+
 ## [1.0.2] - 2026-11-27
 
 ### Added

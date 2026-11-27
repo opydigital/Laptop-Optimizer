@@ -48,7 +48,7 @@ param(
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$AppVersion      = '1.0.2'
+$AppVersion      = '1.0.3'
 $InstallDir      = Join-Path $env:ProgramFiles 'Opydigital\LaptopOptimizer'
 $InstalledScript = Join-Path $InstallDir 'LaptopOptimizer.ps1'
 $StateFile       = Join-Path $InstallDir 'install_state.json'
@@ -331,6 +331,12 @@ function Backup-OriginalState {
         'Svc_RetailDemo.reg'    = 'HKLM\SYSTEM\CurrentControlSet\Services\RetailDemo'
         'Svc_Fax.reg'           = 'HKLM\SYSTEM\CurrentControlSet\Services\Fax'
         'Svc_WalletService.reg' = 'HKLM\SYSTEM\CurrentControlSet\Services\WalletService'
+        'Svc_DPS.reg'           = 'HKLM\SYSTEM\CurrentControlSet\Services\DPS'
+        'Svc_PcaSvc.reg'        = 'HKLM\SYSTEM\CurrentControlSet\Services\PcaSvc'
+        'Svc_TrkWks.reg'        = 'HKLM\SYSTEM\CurrentControlSet\Services\TrkWks'
+        'Svc_StiSvc.reg'        = 'HKLM\SYSTEM\CurrentControlSet\Services\StiSvc'
+        'Svc_BITS.reg'          = 'HKLM\SYSTEM\CurrentControlSet\Services\BITS'
+        'Svc_DusmSvc.reg'       = 'HKLM\SYSTEM\CurrentControlSet\Services\DusmSvc'
     }
 
     foreach ($file in $exports.Keys) {
@@ -374,6 +380,22 @@ function Invoke-Revert {
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\Device Metadata" /v PreventDeviceMetadataFromNetwork /f 2>&1 | Out-Null
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Power\PowerSettings\f15576e8-98b7-4186-b944-eafa664402d9" /v DCSettingIndex /f 2>&1 | Out-Null
     & reg.exe delete "HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell" /v FolderType /f 2>&1 | Out-Null
+    & reg.exe add "HKLM\SYSTEM\CurrentControlSet\Control" /v SvcHostSplitThresholdInKB /t REG_DWORD /d 3670016 /f 2>&1 | Out-Null
+    Set-RegValue 'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData\Microsoft.Copilot_8wekyb3d8bbwe\CopilotAutoStart' 'State' 2 'DWord'
+
+    # Re-enable Windows telemetry/maintenance scheduled tasks
+    $telemetryTasks = @(
+        @{ Path = '\Microsoft\Windows\Application Experience\'; Name = 'Microsoft Compatibility Appraiser' },
+        @{ Path = '\Microsoft\Windows\Application Experience\'; Name = 'ProgramDataUpdater' },
+        @{ Path = '\Microsoft\Windows\Autochk\';                Name = 'Proxy' },
+        @{ Path = '\Microsoft\Windows\Customer Experience Improvement Program\'; Name = 'Consolidator' },
+        @{ Path = '\Microsoft\Windows\Customer Experience Improvement Program\'; Name = 'UsbCeip' },
+        @{ Path = '\Microsoft\Windows\DiskDiagnostic\';         Name = 'Microsoft-Windows-DiskDiagnosticDataCollector' },
+        @{ Path = '\Microsoft\Windows\Feedback\Siuf\';          Name = 'DmClient' }
+    )
+    foreach ($t in $telemetryTasks) {
+        Enable-ScheduledTask -TaskPath $t.Path -TaskName $t.Name -ErrorAction SilentlyContinue | Out-Null
+    }
 
     & fsutil.exe behavior set disablelastaccess 2 2>&1 | Out-Null
     & powercfg.exe /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100 2>&1 | Out-Null
@@ -405,23 +427,46 @@ function Apply-NativeTweaks($Hw, [switch]$Quiet) {
     & sc.exe config DiagTrack start= disabled 2>&1 | Out-Null
     & sc.exe stop DiagTrack 2>&1 | Out-Null
 
-    # WinUtil laptop-safe base tweaks: WPBT, Device Metadata, Explorer Auto-Discovery, safe idle services
+    # WinUtil laptop-safe base tweaks: svchost consolidation, WPBT, Device Metadata, Explorer, Edge/Copilot background
+    & reg.exe add "HKLM\SYSTEM\CurrentControlSet\Control" /v SvcHostSplitThresholdInKB /t REG_DWORD /d 0x04000000 /f 2>&1 | Out-Null
     Set-RegValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' 'DisableWpbtExecution' 1 'DWord'
     Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Device Metadata' 'PreventDeviceMetadataFromNetwork' 1 'DWord'
     Set-RegValue 'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell' 'FolderType' 'NotSpecified' 'String'
 
-    foreach ($svc in @('MapsBroker','RetailDemo','Fax','WalletService')) {
+    # Stop Edge background residency & Copilot auto-startup (keeps both apps installed and usable)
+    Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' 'BackgroundModeEnabled' 0 'DWord'
+    Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' 'StartupBoostEnabled' 0 'DWord'
+    $copilotAutoKey = 'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData\Microsoft.Copilot_8wekyb3d8bbwe\CopilotAutoStart'
+    Set-RegValue $copilotAutoKey 'State' 1 'DWord'
+    Set-RegValue $copilotAutoKey 'UserEnabledStartupOnce' 1 'DWord'
+
+    # Set safe idle services to Manual (reduces active background threads without breaking features)
+    foreach ($svc in @('MapsBroker','RetailDemo','Fax','WalletService','DPS','PcaSvc','TrkWks','StiSvc','BITS','DusmSvc')) {
         if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
             & sc.exe config $svc start= demand 2>&1 | Out-Null
             & sc.exe stop $svc 2>&1 | Out-Null
         }
     }
 
+    # Disable noisy telemetry/maintenance scheduled tasks that cause CPU/disk spikes
+    $telemetryTasks = @(
+        @{ Path = '\Microsoft\Windows\Application Experience\'; Name = 'Microsoft Compatibility Appraiser' },
+        @{ Path = '\Microsoft\Windows\Application Experience\'; Name = 'ProgramDataUpdater' },
+        @{ Path = '\Microsoft\Windows\Autochk\';                Name = 'Proxy' },
+        @{ Path = '\Microsoft\Windows\Customer Experience Improvement Program\'; Name = 'Consolidator' },
+        @{ Path = '\Microsoft\Windows\Customer Experience Improvement Program\'; Name = 'UsbCeip' },
+        @{ Path = '\Microsoft\Windows\DiskDiagnostic\';         Name = 'Microsoft-Windows-DiskDiagnosticDataCollector' },
+        @{ Path = '\Microsoft\Windows\Feedback\Siuf\';          Name = 'DmClient' }
+    )
+    foreach ($t in $telemetryTasks) {
+        Disable-ScheduledTask -TaskPath $t.Path -TaskName $t.Name -ErrorAction SilentlyContinue | Out-Null
+    }
+
     if (-not $Quiet) {
         # Safe temporary files cleanup on interactive/manual apply
         Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item -Path "$env:SystemRoot\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Host "  [OK] Base optimizations applied (incl. WPBT, Device Metadata, Explorer, temp cleanup)" -ForegroundColor Green
+        Write-Host "  [OK] Base optimizations applied (svchost grouping, idle services, tasks, Edge/Copilot bg, temp cleanup)" -ForegroundColor Green
     }
 
     if ($Hw.KERN) {
@@ -479,6 +524,10 @@ function Apply-GamingTweaks([switch]$Quiet) {
     Set-RegValue $gamesKey 'Priority' 6 'DWord'
     Set-RegValue $gamesKey 'Scheduling Category' 'High' 'String'
     Set-RegValue $gamesKey 'SFIO Priority' 'High' 'String'
+
+    # Set Windows Search to on-demand in Gaming mode to prevent indexing spikes during gameplay
+    & sc.exe config WSearch start= demand 2>&1 | Out-Null
+    & sc.exe stop WSearch 2>&1 | Out-Null
 
     # AC (plugged-in) power tuning: full Turbo Boost, PCIe ASPM off, USB Selective Suspend off
     & powercfg.exe /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100 2>&1 | Out-Null
