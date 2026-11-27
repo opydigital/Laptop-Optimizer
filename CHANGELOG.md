@@ -4,6 +4,20 @@ All notable changes to **Opydigital - Laptop Optimizer** will be documented in t
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.4] - 2026-11-27
+
+### Added
+- **Standby RAM Cache & Temp Cleaner** (`[4]` in Main Menu / `-CleanRam`, also runs once after optimization): enables `SeProfileSingleProcessPrivilege` and purges the Windows Standby Memory List via `ntdll.dll` (`NtSetSystemInformation 0x50`) + cleans `%TEMP%`, displaying freed RAM in MB.
+- **Complementary NTFS Optimizations** (all profiles, reversible): `fsutil behavior set disable8dot3 1` and `fsutil behavior set memoryusage 2` (for `>= 8 GB` RAM).
+- **Enhanced Gaming Laptop Suite** (all reversible):
+  - Windows Defender background scan CPU cap (`AvgCPULoadFactor = 15`, keeping real-time protection active).
+  - Additional GameBar/GameDVR tweaks (`AppCaptureEnabled = 0`, `AllowAutoGameMode = 1`, `ShowStartupPanel = 0`).
+  - Conditional NVIDIA telemetry disable when an NVIDIA GPU is detected (preserves GPU power management for laptop battery life).
+  - Wired Ethernet Energy-Efficient Ethernet (`*EEE` / `EnableGreenEthernet = 0`) disabled to reduce ping jitter (leaves Wi-Fi untouched for battery life).
+- **Optional Mouse Acceleration Off** (`[11/11]` in Custom Debloat only — skipped in Automatic Debloat to preserve laptop touchpad feel).
+- **Post-Action Restart Prompt**: offers `[R] Restart Windows now` alongside `[Enter] Return to Main Menu` after applying changes.
+- Shifted **Uninstall & Revert All Changes** to menu option **`[5]`**.
+
 ## [1.0.3] - 2026-11-27
 
 ### Added

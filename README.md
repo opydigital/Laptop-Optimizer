@@ -20,13 +20,14 @@ A lightweight, hardware-aware PowerShell utility to optimize **Windows 11 laptop
 - **Two Optimization Suites + Submenus (Anti-Cheat Safe)**:
   - **Step 1 — Choose Suite / Action**:
     - **`[1]` Standard Laptop**: Everyday responsiveness, SSD/RAM tuning, and battery-life tweaks.
-    - **`[2]` Gaming Laptop**: Includes Standard + **HAGS (`HwSchMode = 2`)**, **Game Mode**, **Game DVR disabled**, **MMCSS gaming scheduler & `NetworkThrottlingIndex`**, and **AC-only PCIe ASPM / USB Selective Suspend off** (preserves VBS/HVCI for anti-cheats and keeps battery savings on DC).
-    - **`[3]` Windows 11 Debloat (WinUtil-based)**: Submenu with **`[1]` Automatic Debloat** (applies all 10 safe tweaks in one step) or **`[2]` Custom Debloat** (step-by-step `[Y/N]` prompt for Telemetry, Activity History, Location Tracking, Consumer Features, Copilot/Windows AI, Bing Search & Start Recommendations, Widgets, Microsoft Edge debloat, pre-installed AppX bloatware, and Quality-of-Life UI tweaks — inspired by [ChrisTitusTech/winutil](https://github.com/ChrisTitusTech/winutil)).
-    - **`[4]` Uninstall & Revert All Changes** *(shown automatically when already installed)*.
+    - **`[2]` Gaming Laptop**: Includes Standard + **HAGS (`HwSchMode = 2`)**, **Game Mode**, **Game DVR & AppCapture disabled**, **Windows Defender scan CPU cap (`15%`, protection stays active)**, **MMCSS gaming scheduler & `NetworkThrottlingIndex`**, **conditional NVIDIA telemetry disable**, **wired Ethernet Green Ethernet/EEE off**, and **AC-only PCIe ASPM / USB Selective Suspend off** (preserves VBS/HVCI for anti-cheats and keeps battery savings on DC).
+    - **`[3]` Windows 11 Debloat (WinUtil-based)**: Submenu with **`[1]` Automatic Debloat** (applies all 10 safe tweaks in one step) or **`[2]` Custom Debloat** (step-by-step `[Y/N]` prompt across 11 items, including optional Mouse Acceleration off — inspired by [ChrisTitusTech/winutil](https://github.com/ChrisTitusTech/winutil)).
+    - **`[4]` Clean RAM Standby Cache & Temp Files**: Purges the Windows Standby Memory List via `ntdll.dll` (`NtSetSystemInformation`) and cleans `%TEMP%` (also runs automatically after optimization or via `-CleanRam`).
+    - **`[5]` Uninstall & Revert All Changes** *(shown automatically when already installed)*.
   - **Step 2 — Choose Logon Mode (Submenu for both `[1]` and `[2]`)**:
     - **`[1]` On-Boot Re-Apply + Background Priority Loop**: Re-applies optimizations at logon via Task Scheduler (headless, no UAC), then runs a foreground priority booster (`AboveNormal`) that **automatically pauses during Direct3D fullscreen games or active anti-cheats**.
     - **`[2]` Native On-Boot Only (Recommended for Competitive Gamers)**: Re-applies optimizations **once at logon** via Task Scheduler (`conhost.exe --headless`, `RunLevel Highest`, no UAC prompt) and **exits immediately (~1–2s)** — leaving **zero background processes** while playing competitive games with kernel anti-cheats (Riot Vanguard, EasyAntiCheat, BattlEye, FACEIT, Ricochet).
-- **Built-in Uninstall & Full Rollback**: When an existing installation is detected, `RUNME.bat` offers **`[4] Uninstall & Revert All Changes`** (also available via `-Uninstall`), which removes the scheduled task, restores all backed-up registry/service/NTFS/power settings, and deletes `%ProgramFiles%\Opydigital\LaptopOptimizer\`.
+- **Built-in Uninstall & Full Rollback**: When an existing installation is detected, `RUNME.bat` offers **`[5] Uninstall & Revert All Changes`** (also available via `-Uninstall`), which removes the scheduled task, restores all backed-up registry/service/NTFS/power/Ethernet settings, and deletes `%ProgramFiles%\Opydigital\LaptopOptimizer\`.
 - **Dry-Run Mode**: Inspect detected hardware, install status, and optimization plan without Administrator privileges (`RUNME.bat -DryRun`).
 
 ---
@@ -35,13 +36,13 @@ A lightweight, hardware-aware PowerShell utility to optimize **Windows 11 laptop
 
 | Optimization | Condition | What It Does |
 | :--- | :--- | :--- |
-| **Base Tweaks** | Always | Tunes `Win32PrioritySeparation`, consolidates `svchost.exe` (`SvcHostSplitThresholdInKB = 64 GB`), tunes shutdown/hang timeouts & NTFS `disablelastaccess`, disables P2P Delivery Optimization, WPBT BIOS bloatware, device companion auto-installs, Explorer auto-folder discovery, Edge background/StartupBoost, Copilot auto-startup (keeps Copilot installed), telemetry scheduled tasks, sets safe idle services (`MapsBroker`, `RetailDemo`, `Fax`, `WalletService`, `DPS`, `PcaSvc`, `TrkWks`, `StiSvc`, `BITS`, `DusmSvc`) to manual, cleans `%TEMP%`, and disables `DiagTrack`. |
+| **Base Tweaks** | Always | Tunes `Win32PrioritySeparation`, consolidates `svchost.exe` (`SvcHostSplitThresholdInKB = 64 GB`), tunes shutdown/hang timeouts & NTFS (`disablelastaccess`, `disable8dot3`, `memoryusage = 2`), disables P2P Delivery Optimization, WPBT BIOS bloatware, device companion auto-installs, Explorer auto-folder discovery, Edge background/StartupBoost, Copilot auto-startup (keeps Copilot installed), telemetry scheduled tasks, sets safe idle services to manual, cleans `%TEMP%`, and disables `DiagTrack`. |
 | **Minimal Visual Effects (+ClearType)** | `RAM <= 4 GB` | Disables heavy window/taskbar animations while preserving ClearType font smoothing (`FontSmoothing = 2`). |
 | **On-Demand Search Indexing** | `RAM <= 4 GB` | Sets `WSearch` to `demand` (manual) so search still works when needed without constant background indexing. |
 | **Resident Kernel in RAM** | `RAM >= 16 GB` | Sets `DisablePagingExecutive = 1` to keep kernel-mode drivers in physical memory. |
 | **SSD / NVMe Optimizations** | `Disk == SSD/NVMe` | Disables `SysMain` (Superfetch) and sets `StartupDelayInMSec = 0` for faster post-login app startup. |
 | **Laptop Battery & Standby** | `Laptop / Portable` | Activates Balanced plan, limits CPU Turbo Boost on battery (`PROCTHROTTLEMAX = 99`), and disables S0 Modern Standby network drain on battery (`DCSettingIndex = 0`). |
-| **Gaming Laptop Suite** | Menu `[2]` / `-Gaming` | Enables HAGS (`HwSchMode = 2`) & Game Mode, disables Game DVR background recording, tunes MMCSS (`NetworkThrottlingIndex = 0xffffffff`, `SystemResponsiveness = 10`, `Tasks\Games`), and disables AC PCIe ASPM & USB Selective Suspend while keeping VBS/HVCI untouched. |
+| **Gaming Laptop Suite** | Menu `[2]` / `-Gaming` | Enables HAGS (`HwSchMode = 2`) & Game Mode, disables Game DVR/AppCapture & GameBar startup panel, caps Defender scan CPU at 15%, tunes MMCSS, disables NVIDIA telemetry (if NVIDIA GPU detected), disables wired Ethernet Green Ethernet/EEE, sets `WSearch` to manual, and disables AC PCIe ASPM & USB Selective Suspend while keeping VBS/HVCI untouched. |
 
 For a complete technical breakdown of every registry key, service, and command, see [docs/TWEAKS.md](docs/TWEAKS.md).
 
@@ -86,7 +87,8 @@ For a complete technical breakdown of every registry key, service, and command, 
 | :--- | :---: | :--- |
 | `-DryRun` | No | Displays detected hardware (including dGPU), install status, and optimization plan without making any changes. |
 | `-Gaming` | Yes | Enables the Gaming Laptop optimization suite (can be combined with `-DryRun`, `-Silent`, or `-InstallTask`). |
-| `-Debloat` | Yes | Launches the interactive step-by-step `[Y/N]` Windows 11 Debloat wizard directly. |
+| `-Debloat` | Yes | Launches the interactive Automatic / Custom Windows 11 Debloat submenu directly. |
+| `-CleanRam` | Yes | Purges the Windows Standby RAM list (`ntdll.dll`) and cleans temporary files. |
 | `-Silent` | Yes | Applies Native On-Boot without prompts (combine with `-Gaming` and/or `-InstallTask`). |
 | `-Uninstall` | Yes | Removes the scheduled task, reverts all system settings, and deletes `%ProgramFiles%\Opydigital\LaptopOptimizer\`. |
 | `-Revert` | Yes | Restores all backed-up `.reg` files, service states, NTFS behavior, and power settings. |

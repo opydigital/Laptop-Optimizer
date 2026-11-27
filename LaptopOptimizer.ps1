@@ -35,6 +35,7 @@ param(
     [switch]$DryRun,
     [switch]$Gaming,
     [switch]$Debloat,
+    [switch]$CleanRam,
     [switch]$Revert,
     [switch]$Uninstall,
     [switch]$Silent,
@@ -48,7 +49,7 @@ param(
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$AppVersion      = '1.0.3'
+$AppVersion      = '1.0.4'
 $InstallDir      = Join-Path $env:ProgramFiles 'Opydigital\LaptopOptimizer'
 $InstalledScript = Join-Path $InstallDir 'LaptopOptimizer.ps1'
 $StateFile       = Join-Path $InstallDir 'install_state.json'
@@ -74,6 +75,7 @@ function Request-Elevation {
     )
     if ($Gaming)        { $argList += '-Gaming' }
     if ($Debloat)       { $argList += '-Debloat' }
+    if ($CleanRam)      { $argList += '-CleanRam' }
     if ($Revert)        { $argList += '-Revert' }
     if ($Uninstall)     { $argList += '-Uninstall' }
     if ($Silent)        { $argList += '-Silent' }
@@ -315,11 +317,13 @@ function Backup-OriginalState {
         'PriorityControl.reg'   = 'HKLM\SYSTEM\CurrentControlSet\Control\PriorityControl'
         'MemoryManagement.reg'  = 'HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management'
         'Desktop.reg'           = 'HKCU\Control Panel\Desktop'
+        'Mouse.reg'             = 'HKCU\Control Panel\Mouse'
         'ExplorerAdv.reg'       = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
         'VisualEffects.reg'     = 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects'
         'ContentDelivery.reg'   = 'HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
         'GraphicsDrivers.reg'   = 'HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers'
         'GameBar.reg'           = 'HKCU\Software\Microsoft\GameBar'
+        'GameDVR.reg'           = 'HKCU\Software\Microsoft\Windows\CurrentVersion\GameDVR'
         'GameConfigStore.reg'   = 'HKCU\System\GameConfigStore'
         'MultimediaProfile.reg' = 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile'
         'Svc_DiagTrack.reg'     = 'HKLM\SYSTEM\CurrentControlSet\Services\DiagTrack'
@@ -363,6 +367,11 @@ function Invoke-Revert {
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy" /v LetAppsRunInBackground /f 2>&1 | Out-Null
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" /v DODownloadMode /f 2>&1 | Out-Null
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\GameDVR" /v AllowGameDVR /f 2>&1 | Out-Null
+    & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Scan" /v AvgCPULoadFactor /f 2>&1 | Out-Null
+    & reg.exe delete "HKLM\SOFTWARE\NVIDIA Corporation\NvControlPanel2\Client" /v OptInOrOutPreference /f 2>&1 | Out-Null
+    & reg.exe delete "HKLM\SOFTWARE\NVIDIA Corporation\Global\FTS" /v EnableRID44231 /f 2>&1 | Out-Null
+    & reg.exe delete "HKLM\SOFTWARE\NVIDIA Corporation\Global\FTS" /v EnableRID64640 /f 2>&1 | Out-Null
+    & reg.exe delete "HKLM\SOFTWARE\NVIDIA Corporation\Global\FTS" /v EnableRID66610 /f 2>&1 | Out-Null
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent" /v DisableWindowsConsumerFeatures /f 2>&1 | Out-Null
     & reg.exe delete "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot" /v TurnOffWindowsCopilot /f 2>&1 | Out-Null
     & reg.exe delete "HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot" /v TurnOffWindowsCopilot /f 2>&1 | Out-Null
@@ -398,10 +407,19 @@ function Invoke-Revert {
     }
 
     & fsutil.exe behavior set disablelastaccess 2 2>&1 | Out-Null
+    & fsutil.exe behavior set disable8dot3 2 2>&1 | Out-Null
+    & fsutil.exe behavior set memoryusage 1 2>&1 | Out-Null
     & powercfg.exe /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100 2>&1 | Out-Null
     & powercfg.exe /setacvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 1 2>&1 | Out-Null
     & powercfg.exe /setacvalueindex SCHEME_CURRENT SUB_USB USBSELECTIVESUSPEND 1 2>&1 | Out-Null
     & powercfg.exe /setactive SCHEME_CURRENT 2>&1 | Out-Null
+
+    Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
+        Where-Object { $_.MediaType -match '802\.3' -and $_.Name -notmatch 'Wi-Fi|Wireless|Bluetooth' } |
+        ForEach-Object {
+            Set-NetAdapterAdvancedProperty -Name $_.Name -RegistryKeyword '*EEE' -RegistryValue 1 -ErrorAction SilentlyContinue
+            Set-NetAdapterAdvancedProperty -Name $_.Name -RegistryKeyword 'EnableGreenEthernet' -RegistryValue 1 -ErrorAction SilentlyContinue
+        }
 
     if (Test-Path $RestoreMarker) { Remove-Item -Path $RestoreMarker -Force -ErrorAction SilentlyContinue }
     Write-Host "  [OK] System settings reverted." -ForegroundColor Green
@@ -418,6 +436,10 @@ function Apply-NativeTweaks($Hw, [switch]$Quiet) {
     Set-RegValue 'HKCU:\Control Panel\Desktop' 'WaitToKillAppTimeout' '5000' 'String'
     Set-RegValue 'HKLM:\SYSTEM\CurrentControlSet\Control' 'WaitToKillServiceTimeout' '3000' 'String'
     & fsutil.exe behavior set disablelastaccess 1 2>&1 | Out-Null
+    & fsutil.exe behavior set disable8dot3 1 2>&1 | Out-Null
+    if ($Hw.RAM -ge 8) {
+        & fsutil.exe behavior set memoryusage 2 2>&1 | Out-Null
+    }
 
     Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy' 'LetAppsRunInBackground' 2 'DWord'
     Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization' 'DODownloadMode' 0 'DWord'
@@ -507,12 +529,81 @@ function Apply-NativeTweaks($Hw, [switch]$Quiet) {
     }
 }
 
-function Apply-GamingTweaks([switch]$Quiet) {
-    # GPU Scheduling (HAGS) + Game Mode + Disable Game DVR background recording
+function Invoke-RamCleanup([switch]$Quiet) {
+    if (-not $Quiet) { Write-Section "RAM STANDBY CACHE & TEMP CLEANUP" }
+
+    $beforeMB = [math]::Round(((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024), 0)
+
+    try {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class OpyRamCleaner {
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct LUID { public uint LowPart; public int HighPart; }
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct TOKEN_PRIVILEGES { public int PrivilegeCount; public LUID Luid; public int Attributes; }
+
+    [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
+    [DllImport("advapi32.dll", SetLastError = true)] public static extern bool OpenProcessToken(IntPtr ProcessHandle, uint DesiredAccess, out IntPtr TokenHandle);
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool LookupPrivilegeValue(string lpSystemName, string lpName, out LUID lpLuid);
+    [DllImport("advapi32.dll", SetLastError = true)] public static extern bool AdjustTokenPrivileges(IntPtr TokenHandle, bool DisableAllPrivileges, ref TOKEN_PRIVILEGES NewState, int BufferLength, IntPtr PreviousState, IntPtr ReturnLength);
+    [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr hObject);
+    [DllImport("ntdll.dll")] public static extern int NtSetSystemInformation(int SystemInformationClass, IntPtr SystemInformation, int SystemInformationLength);
+
+    public static int PurgeStandbyList() {
+        IntPtr token;
+        if (OpenProcessToken(GetCurrentProcess(), 0x0028, out token)) {
+            LUID luid;
+            if (LookupPrivilegeValue(null, "SeProfileSingleProcessPrivilege", out luid)) {
+                TOKEN_PRIVILEGES tp = new TOKEN_PRIVILEGES { PrivilegeCount = 1, Luid = luid, Attributes = 2 };
+                AdjustTokenPrivileges(token, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+            }
+            CloseHandle(token);
+        }
+        IntPtr ptr = Marshal.AllocHGlobal(4);
+        try {
+            Marshal.WriteInt32(ptr, 4); // MemoryPurgeStandbyList
+            return NtSetSystemInformation(0x50, ptr, 4);
+        } finally {
+            Marshal.FreeHGlobal(ptr);
+        }
+    }
+}
+"@ -ErrorAction SilentlyContinue
+        $status = [OpyRamCleaner]::PurgeStandbyList()
+    } catch {
+        $status = -1
+    }
+
+    Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path "$env:SystemRoot\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+
+    $afterMB = [math]::Round(((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024), 0)
+    $freedMB = [math]::Max(0, ($afterMB - $beforeMB))
+
+    if (-not $Quiet) {
+        if ($status -eq 0) {
+            Write-Host ("  [OK] Standby RAM purged & temp cleaned (Free RAM: {0} MB -> {1} MB, +{2} MB freed)." -f $beforeMB, $afterMB, $freedMB) -ForegroundColor Green
+        } else {
+            Write-Host ("  [OK] Temp files cleaned (Standby purge status: 0x{0:X})." -f $status) -ForegroundColor Yellow
+        }
+    }
+    Write-Log "RAM_CLEANUP | Status=$status FreeBefore=${beforeMB}MB FreeAfter=${afterMB}MB"
+}
+
+function Apply-GamingTweaks($Hw, [switch]$Quiet) {
+    # GPU Scheduling (HAGS) + Game Mode + Disable Game DVR / AppCapture
     Set-RegValue 'HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers' 'HwSchMode' 2 'DWord'
     Set-RegValue 'HKCU:\Software\Microsoft\GameBar' 'AutoGameModeEnabled' 1 'DWord'
+    Set-RegValue 'HKCU:\Software\Microsoft\GameBar' 'AllowAutoGameMode' 1 'DWord'
+    Set-RegValue 'HKCU:\Software\Microsoft\GameBar' 'ShowStartupPanel' 0 'DWord'
+    Set-RegValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR' 'AppCaptureEnabled' 0 'DWord'
     Set-RegValue 'HKCU:\System\GameConfigStore' 'GameDVR_Enabled' 0 'DWord'
     Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR' 'AllowGameDVR' 0 'DWord'
+
+    # Cap Windows Defender background scan CPU load (keeps real-time protection active)
+    Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Scan' 'AvgCPULoadFactor' 15 'DWord'
 
     # MMCSS multimedia/gaming scheduler & network throttling
     & reg.exe add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" /v NetworkThrottlingIndex /t REG_DWORD /d 0xffffffff /f 2>&1 | Out-Null
@@ -523,6 +614,22 @@ function Apply-GamingTweaks([switch]$Quiet) {
     Set-RegValue $gamesKey 'Priority' 6 'DWord'
     Set-RegValue $gamesKey 'Scheduling Category' 'High' 'String'
     Set-RegValue $gamesKey 'SFIO Priority' 'High' 'String'
+
+    # Conditional NVIDIA telemetry disable (preserves GPU power management for laptop battery)
+    if ($Hw -and $Hw.DedicatedGPU -match 'NVIDIA|GeForce|RTX|GTX') {
+        Set-RegValue 'HKLM:\SOFTWARE\NVIDIA Corporation\NvControlPanel2\Client' 'OptInOrOutPreference' 0 'DWord'
+        Set-RegValue 'HKLM:\SOFTWARE\NVIDIA Corporation\Global\FTS' 'EnableRID44231' 0 'DWord'
+        Set-RegValue 'HKLM:\SOFTWARE\NVIDIA Corporation\Global\FTS' 'EnableRID64640' 0 'DWord'
+        Set-RegValue 'HKLM:\SOFTWARE\NVIDIA Corporation\Global\FTS' 'EnableRID66610' 0 'DWord'
+    }
+
+    # Disable Energy-Efficient Ethernet / Green Ethernet on wired NICs only (preserves Wi-Fi battery)
+    Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
+        Where-Object { $_.MediaType -match '802\.3' -and $_.Name -notmatch 'Wi-Fi|Wireless|Bluetooth' } |
+        ForEach-Object {
+            Set-NetAdapterAdvancedProperty -Name $_.Name -RegistryKeyword '*EEE' -RegistryValue 0 -ErrorAction SilentlyContinue
+            Set-NetAdapterAdvancedProperty -Name $_.Name -RegistryKeyword 'EnableGreenEthernet' -RegistryValue 0 -ErrorAction SilentlyContinue
+        }
 
     # Set Windows Search to on-demand in Gaming mode to prevent indexing spikes during gameplay
     & sc.exe config WSearch start= demand 2>&1 | Out-Null
@@ -535,7 +642,7 @@ function Apply-GamingTweaks([switch]$Quiet) {
     & powercfg.exe /setactive SCHEME_CURRENT 2>&1 | Out-Null
 
     if (-not $Quiet) {
-        Write-Host "  [OK] Gaming Laptop optimizations applied (HAGS, Game Mode, Game DVR off, MMCSS, AC PCIe/USB)" -ForegroundColor Green
+        Write-Host "  [OK] Gaming Laptop optimizations applied (HAGS, GameBar/DVR, Defender cap, MMCSS, Ethernet EEE, AC PCIe/USB)" -ForegroundColor Green
     }
 }
 
@@ -550,8 +657,9 @@ function Invoke-Optimize($Hw, [bool]$EnableGaming, [bool]$EnablePriorityLoop) {
     Backup-OriginalState
     Apply-NativeTweaks -Hw $Hw
     if ($EnableGaming) {
-        Apply-GamingTweaks
+        Apply-GamingTweaks -Hw $Hw
     }
+    Invoke-RamCleanup -Quiet
 
     $tierName    = if ($EnableGaming) { 'Gaming' } else { 'Standard' }
     $bootName    = if ($EnablePriorityLoop) { 'On-Boot + Loop' } else { 'Native On-Boot' }
@@ -788,6 +896,19 @@ function Invoke-DebloatWizard([switch]$Auto) {
         $applied += 'QoLUI'
     }
 
+    # 11. Disable Mouse Acceleration (Custom Debloat only — skipped in Auto to preserve touchpad feel)
+    if (-not $autoMode) {
+        Write-Host "`n  [11/11] Disable Mouse Acceleration (1:1 Raw Pointer)" -ForegroundColor Cyan
+        Write-Host "          Disables Windows 'Enhance pointer precision' (recommended for external gaming mice)." -ForegroundColor Gray
+        if (Read-YesNo "Disable Mouse Acceleration?") {
+            Set-RegValue 'HKCU:\Control Panel\Mouse' 'MouseSpeed' '0' 'String'
+            Set-RegValue 'HKCU:\Control Panel\Mouse' 'MouseThreshold1' '0' 'String'
+            Set-RegValue 'HKCU:\Control Panel\Mouse' 'MouseThreshold2' '0' 'String'
+            Write-Host "          [OK] Mouse acceleration disabled." -ForegroundColor Green
+            $applied += 'MouseAccelOff'
+        }
+    }
+
     Write-Host ""
     if ($applied.Count -gt 0) {
         $summary = $applied -join ', '
@@ -972,7 +1093,7 @@ if ($BootApply -or $PriorityLoop) {
         $hwBoot = Get-HardwareProfile
         Apply-NativeTweaks -Hw $hwBoot -Quiet
         if ($Gaming) {
-            Apply-GamingTweaks -Quiet
+            Apply-GamingTweaks -Hw $hwBoot -Quiet
         }
         Write-Log "BOOT_APPLY | GAMING=$Gaming | RAM=$($hwBoot.RAM)GB DISK=$($hwBoot.Disk) PORT=$($hwBoot.IsPortable)"
     }
@@ -989,6 +1110,7 @@ if (-not $DryRun -and -not (Test-IsAdmin)) {
     Request-Elevation
 }
 
+if ($CleanRam)      { Invoke-RamCleanup;    if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
 if ($Debloat)       { Invoke-DebloatWizard; if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
 if ($Uninstall)     { Invoke-Uninstall;     if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
 if ($Revert)        { Invoke-Revert;        Write-Log "REVERT | Completed."; if ($Elevated -and -not $Silent) { Read-Host "`nPress Enter to exit" }; exit 0 }
@@ -1058,12 +1180,16 @@ while ($true) {
     Write-Host "      (keeps battery savings on DC; preserves VBS/HVCI for anti-cheats)." -ForegroundColor Gray
     Write-Host ""
     Write-Host "  [3] " -ForegroundColor Yellow -NoNewline
-    Write-Host "Windows 11 Debloat (Interactive Wizard — WinUtil-based)" -ForegroundColor White
-    Write-Host "      Step-by-step [Y/N] wizard for Telemetry, Activity History, Location," -ForegroundColor Gray
-    Write-Host "      Consumer Features, Copilot/AI, Bing Search, Widgets, Edge & Bloatware." -ForegroundColor Gray
+    Write-Host "Windows 11 Debloat (Automatic or Custom — WinUtil-based)" -ForegroundColor White
+    Write-Host "      Telemetry, Activity History, Location, Consumer Features, Copilot/AI," -ForegroundColor Gray
+    Write-Host "      Bing Search, Widgets, Edge, AppX Bloatware, QoL UI & Mouse Accel." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  [4] " -ForegroundColor Blue -NoNewline
+    Write-Host "Clean RAM Standby Cache & Temp Files" -ForegroundColor White
+    Write-Host "      Purges Windows Standby Memory List (ntdll) and cleans %TEMP%." -ForegroundColor Gray
     Write-Host ""
     if ($state.IsInstalled) {
-        Write-Host "  [4] " -ForegroundColor Red -NoNewline
+        Write-Host "  [5] " -ForegroundColor Red -NoNewline
         Write-Host "Uninstall & Revert All Changes" -ForegroundColor White
         Write-Host "      Removes the scheduled task, restores original settings, and deletes" -ForegroundColor Gray
         Write-Host "      $InstallDir." -ForegroundColor Gray
@@ -1073,7 +1199,7 @@ while ($true) {
     Write-Host "Exit" -ForegroundColor Gray
     Write-Host ""
 
-    $menuPrompt = if ($state.IsInstalled) { "Choose an option [1 / 2 / 3 / 4 / 0]" } else { "Choose an option [1 / 2 / 3 / 0]" }
+    $menuPrompt = if ($state.IsInstalled) { "Choose an option [1 / 2 / 3 / 4 / 5 / 0]" } else { "Choose an option [1 / 2 / 3 / 4 / 0]" }
     $suiteChoice = Read-Host $menuPrompt
 
     if ($suiteChoice -eq '0') {
@@ -1089,7 +1215,14 @@ while ($true) {
         continue
     }
 
-    if ($suiteChoice -eq '4' -and $state.IsInstalled) {
+    if ($suiteChoice -eq '4') {
+        Write-Host ""
+        Invoke-RamCleanup
+        Read-Host "`nPress Enter to return to Main Menu" | Out-Null
+        continue
+    }
+
+    if ($suiteChoice -eq '5' -and $state.IsInstalled) {
         Write-Host ""
         $runningFromInstallDir = [System.IO.Path]::GetFullPath($PSCommandPath).StartsWith(
             [System.IO.Path]::GetFullPath($InstallDir),
