@@ -47,6 +47,13 @@ For a complete technical breakdown of every registry key, service, and command, 
 
 ## Quick Start
 
+### Option A — One-Click Launcher (Recommended)
+
+1. Download `Run-LaptopOptimizer.bat` and `LaptopOptimizer.ps1` into the same folder (or clone the repository).
+2. **Double-click `Run-LaptopOptimizer.bat`** — it automatically bypasses PowerShell's execution policy, prompts for UAC elevation, creates the first-run restore point, installs to `%ProgramFiles%\Opydigital\LaptopOptimizer\`, applies the optimizations, and registers the headless logon task.
+
+### Option B — PowerShell CLI
+
 1. Clone or download this repository:
    ```powershell
    git clone https://github.com/opydigital/Laptop-Optimizer.git
@@ -55,7 +62,7 @@ For a complete technical breakdown of every registry key, service, and command, 
 
 2. Preview your hardware profile and optimization plan (no admin required):
    ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\LaptopOptimizer.ps1 -DryRun
+   .\Run-LaptopOptimizer.bat -DryRun
    ```
 
 3. Apply optimizations, install to `%ProgramFiles%\Opydigital\LaptopOptimizer\`, and register the headless logon task (can be run from a regular user PowerShell — UAC elevation is requested automatically):
