@@ -4,7 +4,7 @@ All notable changes to **Opydigital - Laptop Optimizer** will be documented in t
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.1.0] - 2026-11-27
+## [1.0.1] - 2026-11-27
 
 ### Added
 - **Gaming Laptop Optimization Suite** (`-Gaming` / Step 1 Menu `[2]`): HAGS (`HwSchMode = 2`), Game Mode, Game DVR background recording disabled, MMCSS gaming priorities & `NetworkThrottlingIndex = 0xffffffff`, and AC-only PCIe ASPM + USB Selective Suspend disabled (preserving VBS/HVCI for anti-cheats and DC battery savings).

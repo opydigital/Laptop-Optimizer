@@ -47,7 +47,7 @@ param(
 $ErrorActionPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$AppVersion      = '1.1.0'
+$AppVersion      = '1.0.1'
 $InstallDir      = Join-Path $env:ProgramFiles 'Opydigital\LaptopOptimizer'
 $InstalledScript = Join-Path $InstallDir 'LaptopOptimizer.ps1'
 $StateFile       = Join-Path $InstallDir 'install_state.json'
