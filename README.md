@@ -40,7 +40,7 @@ A lightweight, hardware-aware PowerShell utility to optimize **Windows 11 laptop
 | **On-Demand Search Indexing** | `RAM <= 4 GB` | Sets `WSearch` to `demand` (manual) so search still works when needed without constant background indexing. |
 | **Resident Kernel in RAM** | `RAM >= 16 GB` | Sets `DisablePagingExecutive = 1` to keep kernel-mode drivers in physical memory. |
 | **SSD / NVMe Optimizations** | `Disk == SSD/NVMe` | Disables `SysMain` (Superfetch) and sets `StartupDelayInMSec = 0` for faster post-login app startup. |
-| **Laptop Battery & Standby** | `Laptop / Portable` | Activates Balanced plan, limits CPU Turbo Boost on battery (`PROCTHROTTLEMAX = 99`), disables S0 Modern Standby network drain on battery (`DCSettingIndex = 0`), and enables numeric tray battery percentage. |
+| **Laptop Battery & Standby** | `Laptop / Portable` | Activates Balanced plan, limits CPU Turbo Boost on battery (`PROCTHROTTLEMAX = 99`), and disables S0 Modern Standby network drain on battery (`DCSettingIndex = 0`). |
 | **Gaming Laptop Suite** | Menu `[2]` / `-Gaming` | Enables HAGS (`HwSchMode = 2`) & Game Mode, disables Game DVR background recording, tunes MMCSS (`NetworkThrottlingIndex = 0xffffffff`, `SystemResponsiveness = 10`, `Tasks\Games`), and disables AC PCIe ASPM & USB Selective Suspend while keeping VBS/HVCI untouched. |
 
 For a complete technical breakdown of every registry key, service, and command, see [docs/TWEAKS.md](docs/TWEAKS.md).

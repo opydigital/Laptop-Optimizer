@@ -501,10 +501,9 @@ function Apply-NativeTweaks($Hw, [switch]$Quiet) {
         & powercfg.exe /setactive SCHEME_BALANCED 2>&1 | Out-Null
         & powercfg.exe /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 99 2>&1 | Out-Null
         & powercfg.exe /setactive SCHEME_CURRENT 2>&1 | Out-Null
-        # Fix S0 Modern Standby battery drain (disable network connectivity on battery sleep) + tray battery %
+        # Fix S0 Modern Standby battery drain (disable network connectivity on battery sleep)
         Set-RegValue 'HKLM:\SOFTWARE\Policies\Microsoft\Power\PowerSettings\f15576e8-98b7-4186-b944-eafa664402d9' 'DCSettingIndex' 0 'DWord'
-        Set-RegValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'IsBatteryPercentageEnabled' 1 'DWord'
-        if (-not $Quiet) { Write-Host "  [OK] Laptop battery tweaks applied (Turbo DC limit, S0 Standby fix, battery %)" -ForegroundColor Green }
+        if (-not $Quiet) { Write-Host "  [OK] Laptop battery tweaks applied (Turbo DC limit, S0 Standby fix)" -ForegroundColor Green }
     }
 }
 
@@ -1003,7 +1002,7 @@ function Show-HardwareSummary($Hw, $State) {
     Write-PlanRow "Resident kernel in RAM"                 $Hw.KERN        "[RAM >= 16 GB]"
     Write-PlanRow "SSD optimizations (SysMain / Boot)"     $Hw.SSDOpt      "[SSD / NVMe]"
     Write-PlanRow "On-demand Search indexing"              $Hw.IDX         "[RAM <= 4 GB]"
-    Write-PlanRow "Laptop battery (Turbo DC, S0 fix, %)"  $Hw.TurboDC     "[Laptop]"
+    Write-PlanRow "Laptop battery (Turbo DC, S0 fix)"     $Hw.TurboDC     "[Laptop]"
     Write-PlanRow "Gaming Suite (HAGS, DVR, MMCSS, AC)"    ([bool]$Gaming) "[Menu Option 2 / -Gaming]"
     Write-Host ""
 }

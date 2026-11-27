@@ -69,7 +69,6 @@ Before any tweak is applied on the first run:
 - Detected via `Win32_SystemEnclosure.ChassisTypes` (`8, 9, 10, 11, 12, 14, 30, 31, 32`).
 - Activates `SCHEME_BALANCED` and sets `PROCTHROTTLEMAX = 99` on **DC (battery)** only, disabling CPU Turbo Boost on battery to reduce heat, fan noise, and power draw while keeping 100% performance on AC power.
 - `HKLM\SOFTWARE\Policies\Microsoft\Power\PowerSettings\f15576e8-98b7-4186-b944-eafa664402d9\DCSettingIndex = 0` (disables network connectivity during S0 Modern Standby on battery to prevent bag battery drain/overheating).
-- `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\IsBatteryPercentageEnabled = 1` (enables numeric battery percentage in the Windows 11 system tray).
 
 ### Gaming Laptop Suite (`-Gaming` / Menu Option `[2]`)
 - `HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\HwSchMode = 2` (enables Hardware-Accelerated GPU Scheduling / HAGS).
