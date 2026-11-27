@@ -570,6 +570,22 @@ function Read-YesNo([string]$Question) {
     return ($ans -in @('Y','y','Yes','yes'))
 }
 
+function Prompt-PostAction {
+    Write-Host ""
+    Write-Host "  [R]     " -ForegroundColor Yellow -NoNewline
+    Write-Host "Restart Windows now (recommended to apply all changes)" -ForegroundColor White
+    Write-Host "  [Enter] " -ForegroundColor Cyan -NoNewline
+    Write-Host "Return to Main Menu" -ForegroundColor White
+    Write-Host ""
+    $ans = Read-Host "Type R to restart now, or press Enter for Main Menu"
+    if ($ans -in @('R','r','Restart','restart')) {
+        Write-Host "  [*] Restarting Windows in 5 seconds..." -ForegroundColor Yellow
+        Start-Sleep -Seconds 5
+        Restart-Computer -Force
+        exit 0
+    }
+}
+
 function Invoke-DebloatWizard([switch]$Auto) {
     $autoMode = [bool]$Auto
 
@@ -594,7 +610,7 @@ function Invoke-DebloatWizard([switch]$Auto) {
         switch ($dChoice) {
             '1' { $autoMode = $true }
             '2' { $autoMode = $false }
-            default { return }
+            default { return $false }
         }
         Write-Host ""
     } elseif ($Silent) {
@@ -602,7 +618,7 @@ function Invoke-DebloatWizard([switch]$Auto) {
     }
 
     if (-not (Ensure-RestorePoint)) {
-        return
+        return $false
     }
     Backup-OriginalState
     Write-Host ""
@@ -779,8 +795,10 @@ function Invoke-DebloatWizard([switch]$Auto) {
         Write-Log "DEBLOAT ($modeTag) | Applied: $summary"
         Write-Host "  [OK] Debloat completed ($($applied.Count) item(s) applied: $summary)." -ForegroundColor Green
         Write-Host "  Restart Windows (or Explorer) to see all UI changes take effect." -ForegroundColor Cyan
+        return $true
     } else {
         Write-Host "  [--] No debloat items were selected." -ForegroundColor Yellow
+        return $false
     }
 }
 
@@ -1064,8 +1082,10 @@ while ($true) {
 
     if ($suiteChoice -eq '3') {
         Write-Host ""
-        Invoke-DebloatWizard
-        Read-Host "`nPress Enter to return to Main Menu" | Out-Null
+        $debloatApplied = Invoke-DebloatWizard
+        if ($debloatApplied) {
+            Prompt-PostAction
+        }
         continue
     }
 
@@ -1079,7 +1099,7 @@ while ($true) {
         if ($runningFromInstallDir) {
             break
         }
-        Read-Host "`nPress Enter to return to Main Menu" | Out-Null
+        Prompt-PostAction
         continue
     }
 
@@ -1122,6 +1142,8 @@ while ($true) {
     if ($ok) {
         Write-Host "`n  Done! Restart Windows to apply all changes." -ForegroundColor Cyan
         Write-Host "  Installed path: $InstalledScript" -ForegroundColor Gray
+        Prompt-PostAction
+    } else {
+        Read-Host "`nPress Enter to return to Main Menu" | Out-Null
     }
-    Read-Host "`nPress Enter to return to Main Menu" | Out-Null
 }
